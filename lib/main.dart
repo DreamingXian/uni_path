@@ -6,6 +6,7 @@ import 'package:uni_path/screens/home.dart';
 
 // test 2
 // test 3
+// test 4
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
