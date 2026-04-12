@@ -62,7 +62,7 @@ class HomePage extends StatelessWidget {
             // --- MODULES SECTION ---
             _buildNavButton(
               context,
-              title: 'Events Module',
+              title: 'Events Module Page',
               icon: Icons.event,
               color: Colors.orange,
               onTap: () {
@@ -72,7 +72,7 @@ class HomePage extends StatelessWidget {
             ),
             _buildNavButton(
               context,
-              title: 'Community Hub',
+              title: 'Community Hub Page',
               icon: Icons.forum,
               color: Colors.purple,
               onTap: () {
