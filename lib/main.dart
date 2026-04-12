@@ -3,12 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uni_path/providers/user_provider.dart';
 import 'package:uni_path/screens/home.dart';
-import '';
 
-
-// testing on new change line
-
-
+// test 2
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
