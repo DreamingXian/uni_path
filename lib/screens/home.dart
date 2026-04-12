@@ -67,7 +67,7 @@ class HomePage extends StatelessWidget {
               color: Colors.orange,
               onTap: () {
                 // TODO: Link to Event List Screen
-                print("Navigate to Events");
+                print("Navigate to Events pagesss");
               },
             ),
             _buildNavButton(
