@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uni_path/providers/user_provider.dart';
 import 'package:uni_path/screens/home.dart';
 
+// new line added by shouxian
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
