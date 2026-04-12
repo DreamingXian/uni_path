@@ -62,7 +62,7 @@ class HomePage extends StatelessWidget {
             // --- MODULES SECTION ---
             _buildNavButton(
               context,
-              title: 'Events Module pagess',
+              title: 'Events Module pagesss',
               icon: Icons.event,
               color: Colors.orange,
               onTap: () {
