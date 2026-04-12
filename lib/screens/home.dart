@@ -29,7 +29,7 @@ class HomePage extends StatelessWidget {
 
             // --- AUTHENTICATION SECTION ---
             // Inside HomePage ListView...
-            Text('Welcome, ${user?.fullName ?? "Student"}!'),
+            Text('Welcome, ${user?.fullName ?? "Student ABC"}!'),
 
             _buildNavButton(
               context,
