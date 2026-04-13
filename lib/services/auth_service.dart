@@ -56,4 +56,15 @@ class AuthService {
     }
   }
 
+  /// Signs the current user out of Supabase and clears the local session.
+  Future<void> signOut() async {
+    try {
+      await _supabase.auth.signOut();
+      log('User signed out.');
+    } catch (e) {
+      log('Sign-out error: $e');
+      rethrow;
+    }
+  }
+
 }
