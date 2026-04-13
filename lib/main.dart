@@ -33,8 +33,19 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: HomePage(),
+    // Check if a session already exists in Supabase
+    final session = Supabase.instance.client.auth.currentSession;
+
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'UniPath',
+      theme: ThemeData(
+        useMaterial3: true,
+        primarySwatch: Colors.purple,
+      ),
+      // If session exists, we should technically fetch user data,
+      // but for now, let's keep the HomePage as your dev hub.
+      home: const HomePage(),
     );
   }
 }
