@@ -17,6 +17,7 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   late bool isLogin; // State to toggle between Login and Sign Up
   bool isPasswordVisible = false;
+  bool _isLoading = false; // True while waiting for Supabase response
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -72,8 +73,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
                 child: Row(
                   children: [
-                    _buildToggleButton(title: 'Log In', active: isLogin),
-                    _buildToggleButton(title: 'Sign Up', active: !isLogin),
+                    _buildToggleButton(title: 'Log In', active: isLogin, enabled: !_isLoading),
+                    _buildToggleButton(title: 'Sign Up', active: !isLogin, enabled: !_isLoading),
                   ],
                 ),
               ),
@@ -140,11 +141,21 @@ class _AuthScreenState extends State<AuthScreen> {
                           shadowColor: Colors.transparent,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                         ),
-                        onPressed: isLogin ? _handleLogin : _handleSignUp,
-                        child: Text(
-                          isLogin ? 'Log In' : 'Create Account',
-                          style: const TextStyle(fontSize: 18, color: Colors.white),
-                        ),
+                        // Null disables the button while loading
+                        onPressed: _isLoading ? null : (isLogin ? _handleLogin : _handleSignUp),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Text(
+                                isLogin ? 'Log In' : 'Create Account',
+                                style: const TextStyle(fontSize: 18, color: Colors.white),
+                              ),
                       ),
                     ),
                   ],
@@ -216,25 +227,24 @@ class _AuthScreenState extends State<AuthScreen> {
     final name = _nameController.text.trim();
     final studentId = _studentIdController.text.trim();
 
-    if(name == ''){
+    if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your name')),
       );
       return;
     }
-    if(studentId == ''){
+    if (studentId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your studentID')),
+        const SnackBar(content: Text('Please enter your student ID')),
       );
       return;
     }
-    if(password == ''){
+    if (password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your password')),
       );
       return;
     }
-    // Basic Validation
     if (!email.endsWith('@student.tarc.edu.my')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please use your TARUMT student email')),
@@ -242,6 +252,7 @@ class _AuthScreenState extends State<AuthScreen> {
       return;
     }
 
+    setState(() => _isLoading = true);
     try {
       await _authService.signUp(
         email: email,
@@ -250,17 +261,12 @@ class _AuthScreenState extends State<AuthScreen> {
         studentId: studentId,
       );
 
-      // On success, go to home!
       if (mounted) {
-        // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Account created! Please log in.')),
         );
-
-        // Switch the UI back to the Login tab
         setState(() {
           isLogin = true;
-          // Optional: Clear the password field for safety
           _passwordController.clear();
         });
       }
@@ -270,6 +276,8 @@ class _AuthScreenState extends State<AuthScreen> {
           SnackBar(content: Text('Error: $e')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -285,17 +293,16 @@ class _AuthScreenState extends State<AuthScreen> {
       return;
     }
 
+    setState(() => _isLoading = true);
     try {
       UserModel? userProfile = await _authService.signIn(email: email, password: password);
 
       if (userProfile != null && mounted) {
-        // Save the user globally!
         Provider.of<UserProvider>(context, listen: false).setUser(userProfile);
-
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const HomePage()),
-              (route) => false,
+          (route) => false,
         );
       }
     } catch (e) {
@@ -304,14 +311,17 @@ class _AuthScreenState extends State<AuthScreen> {
           SnackBar(content: Text('Login Failed: ${e.toString()}')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
   // --- Helper Widgets ---
 
-  Widget _buildToggleButton({required String title, required bool active}) {
+  Widget _buildToggleButton({required String title, required bool active, bool enabled = true}) {
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => isLogin = title == 'Log In'),
+        // Ignore taps while loading
+        onTap: enabled ? () => setState(() => isLogin = title == 'Log In') : null,
         child: Container(
           decoration: BoxDecoration(
             color: active ? Colors.white : Colors.transparent,
@@ -321,7 +331,11 @@ class _AuthScreenState extends State<AuthScreen> {
           child: Text(
             title,
             style: TextStyle(
-              color: active ? const Color(0xFF6A1B9A) : Colors.grey[600],
+              color: active
+                  ? const Color(0xFF6A1B9A)
+                  : enabled
+                      ? Colors.grey[600]
+                      : Colors.grey[400],
               fontWeight: FontWeight.bold,
             ),
           ),
