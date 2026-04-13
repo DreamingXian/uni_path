@@ -43,15 +43,50 @@ class _HomePageState extends State<HomePage> {
     final user = Provider.of<UserProvider>(context).currentUser;
 
     return Scaffold(
+      drawer: Drawer(
+        child: Column(
+          children: [
+            // Sidebar Header (Optional but looks professional)
+            const UserAccountsDrawerHeader(
+              decoration: BoxDecoration(color: Color(0xFF6A1B9A)),
+              accountName: Text("UniPath User"),
+              accountEmail: Text("student@tarumt.edu.my"),
+              currentAccountPicture: CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.person)),
+            ),
+            // Placeholder Buttons
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Settings'),
+              onTap: () => Navigator.pop(context), // Closes the drawer
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('About UniPath'),
+              onTap: () => Navigator.pop(context),
+            ),
+            const Spacer(), // Pushes the next items to the bottom
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                // Handle Logout Logic here
+              },
+            ),
+          ],
+        ),
+      ),
       // --- 1. TOP AREA (AppBar with Search Logic) ---
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: _isSearching
             ? null
-            : IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A237E)),
-          onPressed: () => Navigator.maybePop(context),
+            : Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Color(0xFF1A237E)),
+            onPressed: () => Scaffold.of(context).openDrawer(), // open sidebar
+          ),
         ),
         title: _isSearching
             ? TextField(
