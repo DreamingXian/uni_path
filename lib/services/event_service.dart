@@ -80,6 +80,22 @@ class EventService {
     }
   }
 
+  /// Fetch deeply nested events (with times and tags) created by a specific User
+  Future<List<EventModel>> getEventsByCreator(String userId) async {
+    try {
+      final response = await _supabase
+          .from('events')
+          .select('*, event_times(*), event_tags(tags(*))')
+          .eq('created_by', userId)
+          .order('created_at', ascending: false);
+          
+      return (response as List).map((json) => EventModel.fromJson(json)).toList();
+    } catch (e) {
+      log('Error fetching user events: $e');
+      return [];
+    }
+  }
+
   /// Search events by title or location.
   Future<List<EventModel>> searchEvents(String query) async {
     try {

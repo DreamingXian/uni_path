@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import 'Events/Tickets/student_ticket.dart';
 import 'Events/create_event.dart';
 import 'auth_screen.dart';
+import 'Events/manage_events.dart';
 import 'Events/events_screen.dart';
 import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
@@ -297,7 +298,54 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // --- Menu Items ---
+          // --- Specific Module Links ---
+          if (isLoggedIn) ...[
+            ListTile(
+              leading: const Icon(Icons.history, color: Color(0xFF6A1B9A)),
+              title: const Text('XXX'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: Icon(user.role == 'society' ? Icons.event_note : Icons.local_activity, color: const Color(0xFF6A1B9A)),
+              title: Text(user.role == 'society' ? 'Manage Events' : 'Manage Tickets'),
+              onTap: () {
+                Navigator.pop(context);
+                if (user.role == 'society') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageEventsScreen()));
+                } else {
+                  // TODO: Manage Tickets Screen
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bookmark_border, color: Color(0xFF6A1B9A)),
+              title: const Text('XXX'),
+              onTap: () => Navigator.pop(context),
+            ),
+          ] else ...[
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF6A1B9A)),
+              title: const Text('Scan QR / NFC'),
+              onTap: () {
+                Navigator.pop(context);
+                // TODO: Implement Scan Functionality
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.more_horiz, color: Color(0xFF6A1B9A)),
+              title: const Text('XXX'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.more_horiz, color: Color(0xFF6A1B9A)),
+              title: const Text('XXX'),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+
+          const Spacer(),
+
+          // --- Bottom General Links ---
           ListTile(
             leading: const Icon(Icons.settings_outlined),
             title: const Text('Settings'),
@@ -308,8 +356,7 @@ class _HomePageState extends State<HomePage> {
             title: const Text('About UniPath'),
             onTap: () => Navigator.pop(context),
           ),
-
-          const Spacer(),
+          
           const Divider(),
 
           // --- Login / Logout button ---
@@ -371,8 +418,12 @@ class _HomePageState extends State<HomePage> {
       // 2. Clear the user from global state
       Provider.of<UserProvider>(context, listen: false).logout();
 
-      // 3. Close the drawer and stay on HomePage (now showing as guest)
-      Navigator.pop(context);
+      // 3. Close the drawer and redirect to Login Page
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
+        (route) => false,
+      );
     }
   }
 
@@ -388,14 +439,4 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Helper for your temporary Nav Buttons
-  Widget _buildNavButton(BuildContext context, String title, IconData icon, Color color, bool showLogin) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(title),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthScreen(showLogin: showLogin))),
-      ),
-    );
-  }
 }
