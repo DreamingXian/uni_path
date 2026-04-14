@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../models/tag_model.dart';
+import '../../services/event_service.dart';
 
 class CreateEventScreen extends StatefulWidget {
   const CreateEventScreen({super.key});
@@ -10,13 +12,26 @@ class CreateEventScreen extends StatefulWidget {
 }
 
 class _CreateEventScreenState extends State<CreateEventScreen> {
+  // --- Form controllers ---
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+
   bool _isFree = false;
-  final List<String> _selectedTags = [];
+
+  final List<TagModel> _selectedTags = []; // holds chosen TagModel objects
   final List<String> _eventTimes = [""]; // Start with one time slot field
 
   // --- Poster image state ---
   File? _posterImage;
   final ImagePicker _picker = ImagePicker();
+  final EventService _eventService = EventService();
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
 
   // Opens bottom sheet to pick source; replaces current poster if confirmed
   Future<void> _pickImage() async {
@@ -206,9 +221,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             const SizedBox(height: 25),
 
             // 2. TITLE
-            const TextField(
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
-              decoration: InputDecoration(
+            TextField(
+              controller: _titleController,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+              decoration: const InputDecoration(
                 hintText: "Event Title",
                 hintStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.grey),
                 border: InputBorder.none,
@@ -216,10 +232,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             ),
 
             // 3. DESCRIPTION
-            const TextField(
+            TextField(
+              controller: _descriptionController,
               maxLines: 4,
-              style: TextStyle(fontSize: 16),
-              decoration: InputDecoration(
+              style: const TextStyle(fontSize: 16),
+              decoration: const InputDecoration(
                 hintText: "Tell students what this event is about...",
                 border: InputBorder.none,
               ),
@@ -232,16 +249,42 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               children: [
                 const Text("Tags (Max 3)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 TextButton.icon(
-                  onPressed: _selectedTags.length < 3 ? () {} : null,
+                  onPressed: () async {
+                    final result = await showDialog<List<TagModel>>(
+                      context: context,
+                      builder: (_) => _TagPickerDialog(
+                        eventService: _eventService,
+                        initialSelected: List.from(_selectedTags),
+                      ),
+                    );
+                    if (result != null && mounted) {
+                      setState(() => _selectedTags
+                        ..clear()
+                        ..addAll(result));
+                    }
+                  },
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text("Add"),
                 ),
               ],
             ),
-            Wrap(
-              spacing: 8,
-              children: _selectedTags.map((tag) => Chip(label: Text(tag))).toList(),
-            ),
+            // Selected tags preview chips
+            if (_selectedTags.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _selectedTags.map((tag) => Chip(
+                  label: Text('#${tag.name}',
+                      style: const TextStyle(color: Color(0xFF6A1B9A), fontWeight: FontWeight.w600)),
+                  backgroundColor: const Color(0xFFEDE7F6),
+                  side: const BorderSide(color: Color(0xFF6A1B9A)),
+                  deleteIcon: const Icon(Icons.close, size: 16, color: Color(0xFF6A1B9A)),
+                  onDeleted: () => setState(() => _selectedTags.remove(tag)),
+                )).toList(),
+              )
+            else
+              const Text('No tags selected',
+                  style: TextStyle(color: Colors.grey, fontSize: 13)),
             const SizedBox(height: 20),
 
             // 5. LOCATION
@@ -354,4 +397,251 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 }
 
 /// Actions the user can choose when tapping an existing poster image.
-enum _PosterAction { keep, change, remove }
+enum _PosterAction { keep, change, remove }
+
+// ---------------------------------------------------------------------------
+// TAG PICKER DIALOG
+// ---------------------------------------------------------------------------
+
+class _TagPickerDialog extends StatefulWidget {
+  final EventService eventService;
+  final List<TagModel> initialSelected;
+
+  const _TagPickerDialog({
+    required this.eventService,
+    required this.initialSelected,
+  });
+
+  @override
+  State<_TagPickerDialog> createState() => _TagPickerDialogState();
+}
+
+class _TagPickerDialogState extends State<_TagPickerDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  List<TagModel> _allTags = [];
+  List<TagModel> _filtered = [];
+  late List<TagModel> _selected;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = List.from(widget.initialSelected);
+    _loadTags();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadTags() async {
+    final tags = await widget.eventService.getAllTags();
+    if (mounted) {
+      setState(() {
+        _allTags = tags;
+        _filtered = tags;
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _onSearch(String query) {
+    setState(() {
+      _filtered = query.isEmpty
+          ? _allTags
+          : _allTags
+              .where((t) => t.name.toLowerCase().contains(query.toLowerCase()))
+              .toList();
+    });
+  }
+
+  bool _isSelected(TagModel tag) => _selected.any((t) => t.id == tag.id);
+
+  void _toggleTag(TagModel tag) {
+    setState(() {
+      if (_isSelected(tag)) {
+        _selected.removeWhere((t) => t.id == tag.id);
+      } else if (_selected.length < 3) {
+        _selected.add(tag);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Tags not yet selected shown in the grid (exclude already chosen)
+    final available = _filtered.where((t) => !_isSelected(t)).toList();
+
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final screenHeight = MediaQuery.of(context).size.height;
+    // Max dialog height = visible screen area minus insetPadding (40 top + 40 bottom)
+    final maxDialogHeight = screenHeight - keyboardHeight - 80;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxDialogHeight),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            // ---- Header ----
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Choose Tags',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A237E))),
+                ),
+                Text('${_selected.length}/3',
+                    style: TextStyle(
+                        color: _selected.length == 3 ? Colors.red : Colors.grey,
+                        fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // ---- Search bar ----
+            TextField(
+              controller: _searchController,
+              onChanged: _onSearch,
+              decoration: InputDecoration(
+                hintText: 'Search tags...',
+                prefixIcon: const Icon(Icons.search, color: Color(0xFF6A1B9A)),
+                filled: true,
+                fillColor: Colors.grey[100],
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ---- Selected chips row ----
+            if (_selected.isNotEmpty) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: _selected.map((tag) => GestureDetector(
+                  onTap: () => _toggleTag(tag),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6A1B9A),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('#${tag.name}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13)),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.close, color: Colors.white, size: 14),
+                      ],
+                    ),
+                  ),
+                )).toList(),
+              ),
+              const Divider(height: 20),
+            ],
+
+            // ---- Available tags grid ----
+            if (_isLoading)
+              const Center(child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ))
+            else if (available.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text('No more tags found',
+                      style: TextStyle(color: Colors.grey)),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 3.5,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  itemCount: available.length,
+                  itemBuilder: (_, i) {
+                    final tag = available[i];
+                    final atLimit = _selected.length >= 3;
+                    return GestureDetector(
+                      onTap: atLimit ? null : () => _toggleTag(tag),
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: atLimit ? Colors.grey[100] : const Color(0xFFEDE7F6),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: atLimit ? Colors.grey[300]! : const Color(0xFF6A1B9A),
+                          ),
+                        ),
+                        child: Text(
+                          '#${tag.name}',
+                          style: TextStyle(
+                            color: atLimit ? Colors.grey : const Color(0xFF6A1B9A),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+            const SizedBox(height: 16),
+
+            // ---- Action buttons ----
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, widget.initialSelected),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A1B9A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => Navigator.pop(context, _selected),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
+            ],
+            ),    // end Column
+          ),      // end SingleChildScrollView
+        ),        // end Padding
+      ),          // end ConstrainedBox
+    );            // end Dialog
+  }
+}
