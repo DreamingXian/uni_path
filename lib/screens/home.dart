@@ -439,14 +439,4 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Helper for your temporary Nav Buttons
-  Widget _buildNavButton(BuildContext context, String title, IconData icon, Color color, bool showLogin) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(title),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthScreen(showLogin: showLogin))),
-      ),
-    );
-  }
 }
