@@ -28,6 +28,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationNameController = TextEditingController();
   final TextEditingController _feeController = TextEditingController();
+  final TextEditingController _capacityController = TextEditingController();
 
   bool _isFree = false;
 
@@ -49,6 +50,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _descriptionController.dispose();
     _locationNameController.dispose();
     _feeController.dispose();
+    _capacityController.dispose();
     super.dispose();
   }
 
@@ -603,7 +605,36 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             ),
             const SizedBox(height: 15),
 
-            // 7. FEES
+            // 7. CAPACITY
+            const Text("Capacity", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            TextField(
+              controller: _capacityController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              onChanged: (val) {
+                if (val.isNotEmpty) {
+                  final intVal = int.tryParse(val) ?? 0;
+                  if (intVal <= 0) {
+                    _capacityController.clear();
+                  } else if (val.startsWith('0')) {
+                    _capacityController.text = intVal.toString();
+                    _capacityController.selection = TextSelection.fromPosition(
+                      TextPosition(offset: _capacityController.text.length),
+                    );
+                  }
+                }
+              },
+              decoration: const InputDecoration(
+                hintText: "Maximum participants (e.g. 50)",
+                prefixIcon: Icon(Icons.people_outline, color: Color(0xFF6A1B9A)),
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            // 8. FEES
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -658,7 +689,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             ),
             const SizedBox(height: 50),
 
-            // 8. ACTION BUTTONS
+            // 9. ACTION BUTTONS
             Row(
               children: [
                 Expanded(
