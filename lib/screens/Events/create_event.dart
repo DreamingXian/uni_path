@@ -6,6 +6,13 @@ import 'package:latlong2/latlong.dart';
 import '../../models/tag_model.dart';
 import '../../services/event_service.dart';
 import 'location_picker_screen.dart';
+import 'package:intl/intl.dart';
+
+class _TimeSlot {
+  DateTime? start;
+  DateTime? end;
+  _TimeSlot({this.start, this.end});
+}
 
 class CreateEventScreen extends StatefulWidget {
   const CreateEventScreen({super.key});
@@ -23,7 +30,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   bool _isFree = false;
 
   final List<TagModel> _selectedTags = []; // holds chosen TagModel objects
-  final List<String> _eventTimes = [""]; // Start with one time slot field
+  final List<_TimeSlot> _eventTimes = [_TimeSlot()]; // Start with one time slot field
 
   // --- Picked map coordinates ---
   LatLng? _pinnedLocation;
@@ -40,6 +47,61 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _descriptionController.dispose();
     _locationNameController.dispose();
     super.dispose();
+  }
+
+  Future<DateTime?> _pickDateTime(DateTime? initialDate, {DateTime? minDateTime}) async {
+    final firstDate = minDateTime != null 
+        ? DateTime(minDateTime.year, minDateTime.month, minDateTime.day) 
+        : DateTime.now();
+
+    DateTime? initial = initialDate ?? DateTime.now();
+    if (initial.isBefore(firstDate)) {
+      initial = firstDate;
+    }
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: firstDate,
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF6A1B9A)),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (date == null) return null;
+
+    if (!mounted) return null;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initialDate ?? DateTime.now()),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF6A1B9A)),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (time == null) return null;
+
+    final selected = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+
+    if (minDateTime != null && selected.isBefore(minDateTime)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time cannot be earlier than start time.')),
+        );
+      }
+      return null;
+    }
+
+    return selected;
   }
 
   // Opens bottom sheet to pick source; replaces current poster if confirmed
@@ -426,28 +488,117 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             const SizedBox(height: 25),
 
             // 6. EVENT TIMES
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Event Schedule", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                TextButton.icon(
-                  onPressed: () => setState(() => _eventTimes.add("")),
-                  icon: const Icon(Icons.more_time, size: 18),
-                  label: const Text("Add Time"),
-                ),
-              ],
+            const Text("Event Schedule", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _eventTimes.length,
+              itemBuilder: (context, index) {
+                final slot = _eventTimes[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      // Start Date Time
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () async {
+                            final dt = await _pickDateTime(slot.start);
+                            if (dt != null) {
+                              setState(() => slot.start = dt);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              slot.start != null 
+                                  ? DateFormat('d MMM yyy, h:mm a').format(slot.start!) 
+                                  : "Start Time",
+                              style: TextStyle(
+                                color: slot.start != null ? Colors.black87 : Colors.grey[600],
+                                fontSize: 12,
+                                fontWeight: slot.start != null ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Text("~", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      // End Date Time
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () async {
+                            if (slot.start == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Please select a start time first.')),
+                              );
+                              return;
+                            }
+                            final dt = await _pickDateTime(
+                              slot.end ?? slot.start, 
+                              minDateTime: slot.start,
+                            );
+                            if (dt != null) {
+                              setState(() => slot.end = dt);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              slot.end != null 
+                                  ? DateFormat('d MMM yyy, h:mm a').format(slot.end!) 
+                                  : "End Time",
+                              style: TextStyle(
+                                color: slot.end != null ? Colors.black87 : Colors.grey[600],
+                                fontSize: 12,
+                                fontWeight: slot.end != null ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Remove button
+                      if (_eventTimes.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                          onPressed: () => setState(() => _eventTimes.removeAt(index)),
+                          padding: const EdgeInsets.only(left: 8),
+                          constraints: const BoxConstraints(),
+                          splashRadius: 20,
+                        )
+                      else
+                        const SizedBox(width: 28), // Placeholder for alignment when no cross
+                    ],
+                  ),
+                );
+              },
             ),
-            ..._eventTimes.map((_) => const Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: TextField(
-                readOnly: true, // Typically opened via a DateTime picker
-                decoration: InputDecoration(
-                  prefixIcon: Icon(Icons.access_time),
-                  hintText: "Pick Date & Time",
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _eventTimes.add(_TimeSlot())),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text("Add Another Time", style: TextStyle(fontWeight: FontWeight.bold)),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF6A1B9A),
                 ),
               ),
-            )),
-            const SizedBox(height: 25),
+            ),
+            const SizedBox(height: 15),
 
             // 7. FEES
             Row(
