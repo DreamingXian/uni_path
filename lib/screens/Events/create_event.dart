@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import '../../models/tag_model.dart';
 import '../../services/event_service.dart';
+import 'location_picker_screen.dart';
 
 class CreateEventScreen extends StatefulWidget {
   const CreateEventScreen({super.key});
@@ -15,11 +18,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   // --- Form controllers ---
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _locationNameController = TextEditingController();
 
   bool _isFree = false;
 
   final List<TagModel> _selectedTags = []; // holds chosen TagModel objects
   final List<String> _eventTimes = [""]; // Start with one time slot field
+
+  // --- Picked map coordinates ---
+  LatLng? _pinnedLocation;
+  String? _pinnedAddress;
 
   // --- Poster image state ---
   File? _posterImage;
@@ -30,6 +38,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _locationNameController.dispose();
     super.dispose();
   }
 
@@ -289,19 +298,130 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
             // 5. LOCATION
             const Text("Location", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const TextField(
-              decoration: InputDecoration(
+            TextField(
+              controller: _locationNameController,
+              decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.location_on, color: Color(0xFF6A1B9A)),
-                hintText: "Enter Venue Name (e.g. DKB)",
+                hintText: "Venue name (e.g. DKB, Room A101)",
               ),
             ),
             const SizedBox(height: 10),
+
+            // Pinned coordinates preview
+            if (_pinnedLocation != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEDE7F6),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF6A1B9A)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.pin_drop, color: Color(0xFF6A1B9A), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _pinnedAddress ??
+                            '${_pinnedLocation!.latitude.toStringAsFixed(5)}, '
+                            '${_pinnedLocation!.longitude.toStringAsFixed(5)}',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF4A148C)),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 16, color: Colors.red),
+                      onPressed: () => setState(() {
+                        _pinnedLocation = null;
+                        _pinnedAddress = null;
+                      }),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ),
+
+            // Mini map preview
+            if (_pinnedLocation != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    height: 160,
+                    child: FlutterMap(
+                      // Key forces a full widget rebuild when location changes,
+                      // so initialCenter always reflects the new coordinates.
+                      key: ValueKey(
+                        '${_pinnedLocation!.latitude},${_pinnedLocation!.longitude}',
+                      ),
+                      options: MapOptions(
+                        initialCenter: _pinnedLocation!,
+                        initialZoom: 15.5,
+                        // Disable all interaction — this is a read-only preview
+                        interactionOptions: const InteractionOptions(
+                          flags: InteractiveFlag.none,
+                        ),
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.uni_path.app',
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _pinnedLocation!,
+                              width: 40,
+                              height: 40,
+                              child: const Icon(
+                                Icons.location_pin,
+                                color: Color(0xFF6A1B9A),
+                                size: 40,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
             // MAP BUTTON
             OutlinedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.map_outlined),
-              label: const Text("Select Location on Map"),
-              style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 45)),
+              onPressed: () async {
+                final result = await Navigator.push<LocationResult>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LocationPickerScreen(
+                      initialPosition: _pinnedLocation,
+                    ),
+                  ),
+                );
+                if (result != null && mounted) {
+                  setState(() {
+                    _pinnedLocation = LatLng(result.latitude, result.longitude);
+                    _pinnedAddress = result.displayName;
+                  });
+                }
+              },
+              icon: Icon(
+                _pinnedLocation != null ? Icons.edit_location_alt : Icons.map_outlined,
+                color: const Color(0xFF6A1B9A),
+              ),
+              label: Text(
+                _pinnedLocation != null ? 'Change Map Location' : 'Select Location on Map',
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 45),
+                side: const BorderSide(color: Color(0xFF6A1B9A)),
+                foregroundColor: const Color(0xFF6A1B9A),
+              ),
             ),
             const SizedBox(height: 25),
 
