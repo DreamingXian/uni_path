@@ -204,6 +204,18 @@ class CommunityService {
     }
   }
 
+  // --- NEW: Fetch all text comments for a specific post ---
+  Future<List<Map<String, dynamic>>> getPostComments(int postId) async {
+    final response = await _supabase
+        .from('comments')
+        .select('*, users(full_name)') // Grab the author's name too!
+        .eq('post_id', postId)
+        .eq('type', 'text') // Only get text comments, ignore 'heart' reactions
+        .order('created_at', ascending: true); // Oldest comments at the top
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   /// Counts reactions (likes) for a specific post.
   Future<int> getReactionCount(int postId) async {
     try {

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../services/community_service.dart';
 import '../../widget/like_button.dart';
+import '../../widget/comment_bottom_sheet.dart';
 import 'edit_post_screen.dart';
 
 class CommunityScreen extends StatefulWidget {
@@ -281,15 +282,22 @@ class _CommunityScreenState extends State<CommunityScreen> {
                           LikeButton(postId: post['id']),
                           const SizedBox(width: 20),
                           // Comment Button
+                          // Comment Button
                           InkWell(
                             onTap: () {
-                              // TODO: Open comment section
+                              // --- NEW: Trigger the Slide-up Sheet ---
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true, // Crucial for the keyboard pushing the UI up
+                                backgroundColor: Colors.transparent, // Makes the rounded top corners look nice
+                                builder: (context) => CommentBottomSheet(postId: post['id']),
+                              );
                             },
                             child: Row(
                               children: [
                                 Icon(Icons.chat_bubble_outline, color: Colors.grey.shade600, size: 22),
                                 const SizedBox(width: 6),
-                                Text('0', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                                const Text('Reply', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)), // Changed "0" to "Reply" to make it simple
                               ],
                             ),
                           ),
