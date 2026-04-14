@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/event_model.dart';
 import '../models/event_time_model.dart';
+import '../models/tag_model.dart';
 
 class EventService {
   final _supabase = Supabase.instance.client;
@@ -155,6 +156,67 @@ class EventService {
     } catch (e) {
       log('Error clearing event times: $e');
       rethrow;
+    }
+  }
+
+  // --- TAG OPERATIONS ---
+  /// Fetches all available tags from the master table for the filter menu.
+  Future<List<TagModel>> getAllTags() async {
+    try {
+      final response = await _supabase.from('tags').select().order('name');
+      return (response as List).map((json) => TagModel.fromJson(json)).toList();
+    } catch (e) {
+      log('Error fetching all tags: $e');
+      return [];
+    }
+  }
+
+  /// Links multiple tags to an event in the junction table.
+  Future<void> addTagsToEvent(int eventId, List<int> tagIds) async {
+    try {
+      final List<Map<String, dynamic>> data = tagIds.map((tId) => {
+        'event_id': eventId,
+        'tag_id': tId,
+      }).toList();
+
+      await _supabase.from('event_tags').insert(data);
+      log('Tags linked to event $eventId');
+    } catch (e) {
+      log('Error linking tags to event: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches all published events including their associated tags.
+  Future<List<Map<String, dynamic>>> getAllEventsWithTags() async {
+    try {
+      // We select all event columns and join the tags table through event_tags
+      final response = await _supabase
+          .from('events')
+          .select('*, tags(*)')
+          .eq('status', 'published')
+          .order('created_at', ascending: false);
+
+      return response;
+    } catch (e) {
+      log('Error fetching events with tags: $e');
+      return [];
+    }
+  }
+
+  /// Filters events by a specific tag name (e.g., 'Sport').
+  Future<List<Map<String, dynamic>>> getEventsByTagName(String tagName) async {
+    try {
+      final response = await _supabase
+          .from('events')
+          .select('*, tags!inner(*)') // !inner ensures we only get events WITH this tag
+          .eq('tags.name', tagName)
+          .eq('status', 'published');
+
+      return response;
+    } catch (e) {
+      log('Error filtering events by tag: $e');
+      return [];
     }
   }
 }
