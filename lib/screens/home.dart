@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
+import 'Events/Tickets/student_ticket.dart';
+import 'Events/create_event.dart';
 import 'auth_screen.dart';
 import 'Events/events_screen.dart';
 import 'Posts/community_screen.dart';
@@ -110,18 +112,21 @@ class _HomePageState extends State<HomePage> {
       // --- 3. CENTER ACTION BUTTON (FloatingActionButton) ---
       // Shifted up to be half-crossed by the bar edge
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Logic based on current page
-          if (_currentIndex == 0) print("Creating a Post");
-          if (_currentIndex == 1) print("Adding an Event");
-          if (_currentIndex == 2) print("Setting a Reminder");
-        },
+        onPressed: () => _handleFabAction(context, user),
         backgroundColor: const Color(0xFF6A1B9A),
         shape: const CircleBorder(),
+        // Inside floatingActionButton:
         child: Icon(
-          _currentIndex == 0 ? Icons.add_comment :
-          _currentIndex == 1 ? Icons.add_box :
-          _currentIndex == 2 ? Icons.alarm_add : Icons.home,
+          // Condition 1: If on Events tab AND user is a student, show Ticket icon
+          _currentIndex == 1 && user?.role == 'student'
+              ? Icons.confirmation_number
+              : (_currentIndex == 0
+              ? Icons.add_comment
+              : _currentIndex == 1
+              ? Icons.add_box
+              : _currentIndex == 2
+              ? Icons.alarm_add
+              : Icons.home),
           color: Colors.white,
         ),
       ),
@@ -148,7 +153,79 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+  /// Handles the action button based on the user's role and login status.
+  void _handleFabAction(BuildContext context, dynamic user) {
+    // 1. Check if logged in first (Gatekeeper)
+    if (user == null) {
+      _showLoginPrompt(context);
+      return;
+    }
 
+    // 2. Handle actions based on which tab is active
+    switch (_currentIndex) {
+      case 0: // Community Hub
+        print("Creating a Post...");
+        // Future: Navigator.push(context, MaterialPageRoute(builder: (context) => const CreatePostScreen()));
+        break;
+
+      case 1: // Events Module
+        if (user.role == 'society') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreateEventScreen()),
+          );
+        } else {
+          // Students or anyone else viewing events
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const StudentTicketScreen()),
+          );
+        }
+        break;
+
+      case 2: // Schedules & Reminders
+        print("Setting a Reminder...");
+        // Future: Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateScheduleScreen()));
+        break;
+
+      case 3: // Profile
+      // For example: Scroll to top or refresh profile data
+        setState(() => _currentIndex = 0); // Return to home/community
+        break;
+    }
+  }
+
+  /// Shows a pop-up requiring the user to log in before proceeding.
+  void _showLoginPrompt(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Login Required"),
+        content: const Text("Please log in to proceed with this action."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6A1B9A),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx); // Close dialog
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
+              );
+            },
+            child: const Text("Login"),
+          ),
+        ],
+      ),
+    );
+  }
   // -------------------------------------------------------
   // DRAWER
   // -------------------------------------------------------
