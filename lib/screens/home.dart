@@ -9,6 +9,7 @@ import 'Events/events_screen.dart';
 import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
 import 'Profiles/profile_screen.dart';
+import 'Posts/create_post_screen.dart';
 
 
 class HomePage extends StatefulWidget {
@@ -164,8 +165,12 @@ class _HomePageState extends State<HomePage> {
     // 2. Handle actions based on which tab is active
     switch (_currentIndex) {
       case 0: // Community Hub
-        print("Creating a Post...");
-        // Future: Navigator.push(context, MaterialPageRoute(builder: (context) => const CreatePostScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+        ).then((value) {
+          // We will add logic here later to refresh the feed if value == true
+        });
         break;
 
       case 1: // Events Module
