@@ -6,7 +6,7 @@ import 'package:uni_path/providers/user_provider.dart';
 import 'package:uni_path/screens/home.dart';
 
 // new line added by shouxian
-
+//xindongxi
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
