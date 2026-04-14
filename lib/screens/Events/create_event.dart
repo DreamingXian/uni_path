@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
@@ -26,6 +27,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationNameController = TextEditingController();
+  final TextEditingController _feeController = TextEditingController();
 
   bool _isFree = false;
 
@@ -46,6 +48,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _locationNameController.dispose();
+    _feeController.dispose();
     super.dispose();
   }
 
@@ -610,19 +613,47 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                     const Text("Free Event", style: TextStyle(fontSize: 14)),
                     Checkbox(
                       value: _isFree,
-                      onChanged: (val) => setState(() => _isFree = val!),
+                      onChanged: (val) {
+                        setState(() {
+                          _isFree = val!;
+                          if (_isFree) {
+                            _feeController.text = "0";
+                          } else {
+                            _feeController.clear();
+                          }
+                        });
+                      },
                     ),
                   ],
                 ),
               ],
             ),
             TextField(
+              controller: _feeController,
               enabled: !_isFree,
               keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              onChanged: (val) {
+                if (!_isFree && val.isNotEmpty) {
+                  final intVal = int.tryParse(val) ?? 0;
+                  if (intVal <= 0) {
+                    _feeController.clear();
+                  } else if (val.startsWith('0')) {
+                    // Prevent leading zeros for valid numbers
+                    _feeController.text = intVal.toString();
+                    _feeController.selection = TextSelection.fromPosition(
+                      TextPosition(offset: _feeController.text.length),
+                    );
+                  }
+                }
+              },
               decoration: InputDecoration(
-                hintText: _isFree ? "0.00" : "Enter Amount",
+                hintText: _isFree ? "0" : "Enter Amount (e.g. 10)",
                 filled: _isFree,
                 fillColor: _isFree ? Colors.grey[100] : null,
+                prefixText: _isFree ? null : 'RM ',
               ),
             ),
             const SizedBox(height: 50),
