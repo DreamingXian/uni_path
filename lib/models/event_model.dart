@@ -1,3 +1,6 @@
+import 'event_time_model.dart';
+import 'tag_model.dart';
+
 class EventModel {
   final int? id;
   final String title;
@@ -11,27 +14,46 @@ class EventModel {
   final int? capacity;
   final String? eventPosterUrl;
   final String? note;
+  
+  // Embedded Relational Data
+  final List<EventTimeModel>? eventTimes;
+  final List<TagModel>? tags;
 
   EventModel({
     this.id, required this.title, this.description, this.locationName,
     this.latitude, this.longitude, required this.status, required this.createdBy,
     this.fees, this.capacity, this.eventPosterUrl, this.note,
+    this.eventTimes, this.tags,
   });
 
-  factory EventModel.fromJson(Map<String, dynamic> json) => EventModel(
-    id: json['id'],
-    title: json['title'] ?? '',
-    description: json['description'],
-    locationName: json['location_name'],
-    latitude: json['latitude']?.toDouble(),
-    longitude: json['longitude']?.toDouble(),
-    status: json['status'] ?? 'draft',
-    createdBy: json['created_by'],
-    fees: json['fees']?.toDouble(),
-    capacity: json['capacity'],
-    eventPosterUrl: json['event_poster_url'],
-    note: json['note'],
-  );
+  factory EventModel.fromJson(Map<String, dynamic> json) {
+    List<EventTimeModel>? parsedTimes;
+    if (json['event_times'] != null) {
+      parsedTimes = (json['event_times'] as List).map((i) => EventTimeModel.fromJson(i)).toList();
+    }
+    
+    List<TagModel>? parsedTags;
+    if (json['event_tags'] != null) {
+      parsedTags = (json['event_tags'] as List).map((i) => TagModel.fromJson(i['tags'])).toList();
+    }
+
+    return EventModel(
+      id: json['id'],
+      title: json['title'] ?? '',
+      description: json['description'],
+      locationName: json['location_name'],
+      latitude: json['latitude']?.toDouble(),
+      longitude: json['longitude']?.toDouble(),
+      status: json['status'] ?? 'draft',
+      createdBy: json['created_by'],
+      fees: json['fees']?.toDouble(),
+      capacity: json['capacity'],
+      eventPosterUrl: json['event_poster_url'],
+      note: json['note'],
+      eventTimes: parsedTimes,
+      tags: parsedTags,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
     'title': title,

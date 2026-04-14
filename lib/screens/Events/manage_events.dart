@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../../providers/user_provider.dart';
+import '../../models/event_model.dart';
+import '../../services/event_service.dart';
 
 class ManageEventsScreen extends StatefulWidget {
   const ManageEventsScreen({super.key});
@@ -8,6 +13,14 @@ class ManageEventsScreen extends StatefulWidget {
 }
 
 class _ManageEventsScreenState extends State<ManageEventsScreen> {
+  final EventService _eventService = EventService();
+  ScrollController _scrollController = ScrollController();
+  
+  bool _isLoading = true;
+  List<EventModel> _allEvents = [];
+  List<EventModel> _filteredEvents = [];
+  int _displayLimit = 3;
+
   // --- UI State Variables ---
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
@@ -21,7 +34,100 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
   bool _showFreeOnly = false; // false = Show all, true = Free only
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _fetchMyEvents();
+  }
+
+  Future<void> _fetchMyEvents() async {
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+    if (user == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    final events = await _eventService.getEventsByCreator(user.id);
+    if (!mounted) return;
+
+    setState(() {
+      _allEvents = events;
+      _isLoading = false;
+    });
+    _applyFilters();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 50) {
+      if (_displayLimit < _filteredEvents.length) {
+        setState(() {
+          _displayLimit += 3;
+        });
+      }
+    }
+  }
+
+  void _applyFilters() {
+    final now = DateTime.now();
+    final query = _searchController.text.trim().toLowerCase();
+
+    List<EventModel> results = _allEvents.where((e) {
+      // 1. Search Query
+      if (_isSearching && query.isNotEmpty) {
+        bool matchesTitle = e.title.toLowerCase().contains(query);
+        bool matchesLoc = e.locationName?.toLowerCase().contains(query) ?? false;
+        if (!matchesTitle && !matchesLoc) return false;
+      }
+
+      // 2. Free Only
+      if (_showFreeOnly && (e.fees ?? 0) > 0) return false;
+
+      // 3. Status Definitions
+      final isDraft = e.status == 'draft';
+      final isCancelled = e.status == 'cancelled';
+      final isPublished = e.status == 'published';
+
+      final times = e.eventTimes ?? [];
+      bool hasStarted = times.any((t) => t.startDateTime.isBefore(now));
+      bool hasEnded = times.isNotEmpty && times.every((t) => t.endDateTime.isBefore(now));
+      bool isOngoing = hasStarted && !hasEnded;
+      bool isNotStarted = !hasStarted && !hasEnded;
+
+      if (_selectedFilter == 'Draft') {
+        if (!isDraft) return false;
+      } else if (_selectedFilter == 'Published') {
+        if (!isPublished || !isNotStarted) return false;
+      } else if (_selectedFilter == 'Ongoing') {
+        if (!isPublished || !isOngoing) return false;
+      } else if (_selectedFilter == 'Ended') {
+        if (!isCancelled && !(isPublished && hasEnded)) return false;
+      }
+
+      return true;
+    }).toList();
+
+    // 4. Sort (Nearest to Oldest -> Start date ascending towards future)
+    DateTime getMinStart(EventModel ev) {
+      if (ev.eventTimes == null || ev.eventTimes!.isEmpty) return DateTime(2100); 
+      return ev.eventTimes!.map((t) => t.startDateTime).reduce((a, b) => a.isBefore(b) ? a : b);
+    }
+
+    results.sort((a, b) {
+      final tA = getMinStart(a);
+      final tB = getMinStart(b);
+      return _sortNearestFirst ? tA.compareTo(tB) : tB.compareTo(tA);
+    });
+
+    setState(() {
+      _filteredEvents = results;
+      // Reset limits when filters change to avoid showing suddenly 9 loaded items.
+      _displayLimit = 3;
+    });
+  }
+
+  @override
   void dispose() {
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -41,9 +147,7 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
                 hintStyle: TextStyle(color: Colors.white70),
                 border: InputBorder.none,
               ),
-              onChanged: (val) {
-                // TODO: trigger search query update
-              },
+              onChanged: (val) => _applyFilters(),
             )
           : const Text('Manage Events', style: TextStyle(fontWeight: FontWeight.bold)),
       actions: [
@@ -54,7 +158,7 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
               if (_isSearching) {
                 _isSearching = false;
                 _searchController.clear();
-                // TODO: clear search query
+                _applyFilters();
               } else {
                 _isSearching = true;
               }
@@ -78,7 +182,10 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
               onTap: () {
-                setState(() => _selectedFilter = filter);
+                setState(() {
+                  _selectedFilter = filter;
+                });
+                _applyFilters();
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
@@ -114,7 +221,10 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
           // Sort Toggle
           TextButton.icon(
             onPressed: () {
-              setState(() => _sortNearestFirst = !_sortNearestFirst);
+              setState(() {
+                _sortNearestFirst = !_sortNearestFirst;
+              });
+              _applyFilters();
             },
             icon: const Icon(Icons.sort, size: 18, color: Color(0xFF6A1B9A)),
             label: Text(
@@ -140,6 +250,7 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
             ),
             onSelected: (bool selected) {
               setState(() => _showFreeOnly = selected);
+              _applyFilters();
             },
           ),
         ],
@@ -162,41 +273,37 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
           
           // Events List
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: const [
-                _EventCardDummy(
-                  title: "Google Developer Tech Talk",
-                  location: "DKB, FTMK Building",
-                  schedules: ["12 Apr 2026, 2:00 PM ~ 4:00 PM"],
-                  fees: 0,
-                  currentEnrollment: 45,
-                  capacity: 50,
-                  imageUrl: "https://images.unsplash.com/photo-1540317580384-e5d43867caa6?auto=format&fit=crop&w=600&q=80",
-                ),
-                _EventCardDummy(
-                  title: "Annual Hackathon 2026",
-                  location: "Main Hall, Library",
-                  schedules: [
-                    "20 May 2026, 8:00 AM ~ 10:00 PM",
-                    "21 May 2026, 8:00 AM ~ 5:00 PM"
-                  ],
-                  fees: 15.00,
-                  currentEnrollment: 120,
-                  capacity: 200,
-                  imageUrl: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=600&q=80",
-                ),
-                _EventCardDummy(
-                  title: "Web3 & Blockchain Workshop",
-                  location: "Lab C, Engineering Block",
-                  schedules: ["15 Jun 2026, 9:00 AM ~ 12:00 PM"],
-                  fees: 5.50,
-                  currentEnrollment: 10,
-                  capacity: 30,
-                  imageUrl: "https://images.unsplash.com/photo-1639762681485-074b7f4ec651?auto=format&fit=crop&w=600&q=80",
-                ),
-              ],
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A)))
+                : _filteredEvents.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.event_note, size: 60, color: Colors.grey),
+                            SizedBox(height: 15),
+                            Text(
+                              "No events matched your filters.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _displayLimit < _filteredEvents.length ? _displayLimit + 1 : _filteredEvents.length,
+                        itemBuilder: (context, index) {
+                          if (index == _displayLimit) {
+                            return const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A))),
+                            );
+                          }
+                          return _EventCard(event: _filteredEvents[index]);
+                        },
+                      ),
           )
         ],
       ),
@@ -205,32 +312,31 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// DUMMY EVENT CARD TEMPLATE
+// ACTUAL EVENT CARD
 // ---------------------------------------------------------------------------
 
-class _EventCardDummy extends StatelessWidget {
-  final String title;
-  final String location;
-  final List<String> schedules;
-  final double fees;
-  final int currentEnrollment;
-  final int capacity;
-  final String imageUrl;
+class _EventCard extends StatelessWidget {
+  final EventModel event;
 
-  const _EventCardDummy({
-    required this.title,
-    required this.location,
-    required this.schedules,
-    required this.fees,
-    required this.currentEnrollment,
-    required this.capacity,
-    required this.imageUrl,
-  });
+  const _EventCard({required this.event});
 
   @override
   Widget build(BuildContext context) {
-    // Calculate progress fraction
-    final double fraction = capacity > 0 ? (currentEnrollment / capacity).clamp(0.0, 1.0) : 0.0;
+    // 1. Calculations
+    final currentEnrollment = 0; // Replace with actual metrics eventually
+    final capacity = event.capacity ?? 0;
+    final fraction = capacity > 0 ? (currentEnrollment / capacity).clamp(0.0, 1.0) : 0.0;
+    final fees = event.fees ?? 0;
+    
+    // Formatting date times
+    List<String> formattedSchedules = [];
+    if (event.eventTimes != null) {
+      formattedSchedules = event.eventTimes!.map((time) {
+        final start = DateFormat('dd MMM yyyy, hh:mm a').format(time.startDateTime);
+        final end = DateFormat('hh:mm a').format(time.endDateTime);
+        return "$start ~ $end"; 
+      }).toList();
+    }
 
     return Card(
       elevation: 3,
@@ -247,17 +353,17 @@ class _EventCardDummy extends StatelessWidget {
             // --- TOP: Poster Image & Fees Tag ---
             Stack(
               children: [
-                Image.network(
-                  imageUrl,
-                  height: 160,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stack) => Container(
+                if (event.eventPosterUrl != null && event.eventPosterUrl!.isNotEmpty)
+                  Image.network(
+                    event.eventPosterUrl!,
                     height: 160,
-                    color: Colors.grey[300],
-                    child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 50),
-                  ),
-                ),
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildFallbackImage(),
+                  )
+                else
+                  _buildFallbackImage(),
+                  
                 Positioned(
                   top: 12,
                   right: 12,
@@ -287,7 +393,7 @@ class _EventCardDummy extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Schedules
-                  ...schedules.map((time) => Padding(
+                  ...formattedSchedules.map((timeStr) => Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
                       children: [
@@ -295,7 +401,7 @@ class _EventCardDummy extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            time,
+                            timeStr,
                             style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                           ),
                         ),
@@ -306,7 +412,7 @@ class _EventCardDummy extends StatelessWidget {
 
                   // Title
                   Text(
-                    title,
+                    event.title,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -318,26 +424,29 @@ class _EventCardDummy extends StatelessWidget {
                   const SizedBox(height: 6),
 
                   // Location
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF6A1B9A)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          location,
-                          style: const TextStyle(fontSize: 14, color: Colors.black87),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                  if (event.locationName != null && event.locationName!.isNotEmpty)...[
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF6A1B9A)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            event.locationName!,
+                            style: const TextStyle(fontSize: 14, color: Colors.black87),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ] else ...[
+                    const SizedBox(height: 14),
+                  ],
 
                   // Progress Status Bar
                   Row(
                     children: [
-                      // The Progress Bar itself
                       Expanded(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
@@ -350,8 +459,6 @@ class _EventCardDummy extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      
-                      // Progress Text
                       RichText(
                         text: TextSpan(
                           style: const TextStyle(fontSize: 13, color: Colors.black87),
@@ -364,12 +471,9 @@ class _EventCardDummy extends StatelessWidget {
                           ],
                         ),
                       ),
-                      
                       const SizedBox(width: 12),
-                      
-                      // Capacity max text
                       Text(
-                        "Max $capacity",
+                        capacity > 0 ? "Max $capacity" : "Unlimited",
                         style: const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
@@ -380,6 +484,15 @@ class _EventCardDummy extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFallbackImage() {
+    return Container(
+      height: 160,
+      width: double.infinity,
+      color: Colors.grey[300],
+      child: const Icon(Icons.event_note, color: Colors.grey, size: 50),
     );
   }
 }
