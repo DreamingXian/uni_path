@@ -147,4 +147,42 @@ class ScheduleService {
       rethrow;
     }
   }
+
+  /// Fetches all schedules that match a specific label (e.g., 'Study' or 'Work').
+  Future<List<ScheduleModel>> getSchedulesByLabel(String labelName) async {
+    try {
+      final response = await _supabase
+          .from('schedules')
+          .select()
+          .eq('label_name', labelName)
+          .order('start_time', ascending: true);
+
+      return (response as List).map((json) => ScheduleModel.fromJson(json)).toList();
+    } catch (e) {
+      log('Error filtering schedules by label: $e');
+      return [];
+    }
+  }
+
+  /// Fetches a list of all unique labels the user has created.
+  /// Useful for building a "Filter by Category" chip menu in the UI.
+  Future<List<String>> getMyUniqueLabels() async {
+    try {
+      // We use a select with 'label_name' to get only that column
+      final response = await _supabase
+          .from('schedules')
+          .select('label_name')
+          .not('label_name', 'is', null);
+
+      // Convert to a Set to remove duplicates, then back to a List
+      final Set<String> labels = (response as List)
+          .map((item) => item['label_name'] as String)
+          .toSet();
+
+      return labels.toList();
+    } catch (e) {
+      log('Error fetching unique labels: $e');
+      return [];
+    }
+  }
 }
