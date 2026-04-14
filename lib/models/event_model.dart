@@ -10,11 +10,12 @@ class EventModel {
   final double? fees;
   final int? capacity;
   final String? eventPosterUrl;
+  final String? note;
 
   EventModel({
     this.id, required this.title, this.description, this.locationName,
     this.latitude, this.longitude, required this.status, required this.createdBy,
-    this.fees, this.capacity, this.eventPosterUrl,
+    this.fees, this.capacity, this.eventPosterUrl, this.note,
   });
 
   factory EventModel.fromJson(Map<String, dynamic> json) => EventModel(
@@ -29,6 +30,7 @@ class EventModel {
     fees: json['fees']?.toDouble(),
     capacity: json['capacity'],
     eventPosterUrl: json['event_poster_url'],
+    note: json['note'],
   );
 
   Map<String, dynamic> toMap() => {
@@ -41,5 +43,6 @@ class EventModel {
     'fees': fees,
     'capacity': capacity,
     'event_poster_url': eventPosterUrl,
+    'note': note,
   };
 }

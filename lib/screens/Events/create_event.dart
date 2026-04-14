@@ -5,6 +5,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/tag_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../models/tag_model.dart';
+import '../../models/event_model.dart';
+import '../../models/event_time_model.dart';
 import '../../services/event_service.dart';
 import 'location_picker_screen.dart';
 import 'package:intl/intl.dart';
@@ -29,8 +33,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   final TextEditingController _locationNameController = TextEditingController();
   final TextEditingController _feeController = TextEditingController();
   final TextEditingController _capacityController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
 
   bool _isFree = false;
+  bool _isSubmitting = false;
 
   final List<TagModel> _selectedTags = []; // holds chosen TagModel objects
   final List<_TimeSlot> _eventTimes = [_TimeSlot()]; // Start with one time slot field
@@ -51,6 +57,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _locationNameController.dispose();
     _feeController.dispose();
     _capacityController.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
@@ -111,6 +118,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
   // Opens bottom sheet to pick source; replaces current poster if confirmed
   Future<void> _pickImage() async {
+    FocusScope.of(context).unfocus();
     // If a poster already exists, ask first
     if (_posterImage != null) {
       final action = await _showChangeImageDialog();
@@ -220,6 +228,151 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     );
   }
 
+  Future<void> _handleAction(String status) async {
+    FocusScope.of(context).unfocus();
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event title is required.')));
+      return;
+    }
+
+    final validTimes = _eventTimes.where((t) => t.start != null).toList();
+
+    if (status == 'published') {
+      if (_descriptionController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Description is required for publishing.')));
+        return;
+      }
+      if (validTimes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('At least one event schedule is required for publishing.')));
+        return;
+      }
+      if (_capacityController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Capacity is required for publishing.')));
+        return;
+      }
+      if (!_isFree && _feeController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fees amount is required for publishing paid events.')));
+        return;
+      }
+    }
+
+    List<String> emptyFields = [];
+    if (_posterImage == null) emptyFields.add('Event Poster');
+    
+    if (status == 'draft') {
+      if (_descriptionController.text.trim().isEmpty) emptyFields.add('Description');
+      if (validTimes.isEmpty) emptyFields.add('Event Schedule');
+      if (_capacityController.text.trim().isEmpty) emptyFields.add('Capacity');
+      if (!_isFree && _feeController.text.trim().isEmpty) emptyFields.add('Fees');
+    }
+
+    if (_locationNameController.text.trim().isEmpty) emptyFields.add('Location Name');
+    if (_pinnedLocation == null) emptyFields.add('Map Location');
+    if (_noteController.text.trim().isEmpty) emptyFields.add('Additional Notes');
+
+    String promptMsg = status == 'draft' 
+        ? "Are you sure you want to save this event as a draft?"
+        : "Are you sure you want to publish this event?";
+
+    if (emptyFields.isNotEmpty) {
+      promptMsg += "\n\nThe following optional fields are currently empty:\n" + 
+                   emptyFields.map((e) => "- $e").join("\n") +
+                   "\n\nDo you still want to proceed?";
+    }
+
+    final String titleStr = status == 'draft' ? "Save as Draft" : "Publish Event";
+
+    _showConfirmationPrompt(titleStr, promptMsg, () => _submitEvent(status));
+  }
+
+  Future<void> _submitEvent(String status) async {
+    final validTimes = _eventTimes.where((t) => t.start != null).toList();
+
+    setState(() => _isSubmitting = true);
+    try {
+      String? posterUrl;
+      if (_posterImage != null) {
+        posterUrl = await _eventService.uploadPoster(_posterImage!);
+      }
+
+      final feesVal = _isFree ? 0.0 : double.tryParse(_feeController.text.trim());
+      final capacityVal = int.tryParse(_capacityController.text.trim());
+      final user = Supabase.instance.client.auth.currentUser;
+
+      if (user == null) throw Exception("User is not logged in");
+
+      final event = EventModel(
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        locationName: _locationNameController.text.trim(),
+        latitude: _pinnedLocation?.latitude,
+        longitude: _pinnedLocation?.longitude,
+        status: status,
+        createdBy: user.id,
+        fees: feesVal,
+        capacity: capacityVal,
+        eventPosterUrl: posterUrl,
+        note: _noteController.text.trim(),
+      );
+
+      final eventId = await _eventService.insertEvent(event);
+      if (eventId != null) {
+        final timeModels = validTimes.map((t) => EventTimeModel(
+          eventId: eventId,
+          startDateTime: t.start!,
+          endDateTime: t.end ?? t.start!, // If end time is missing, default to start time
+        )).toList();
+        await _eventService.insertEventTimes(timeModels);
+
+        if (_selectedTags.isNotEmpty) {
+          await _eventService.addTagsToEvent(eventId, _selectedTags.map((t) => t.id!).toList());
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(status == 'published' ? 'Event Published!' : 'Saved as Draft!')),
+          );
+          Navigator.pop(context, true); // true implies success
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save event: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _showConfirmationPrompt(String title, String message, VoidCallback onConfirm) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A1B9A)),
+            child: const Text('Yes', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      onConfirm();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -232,7 +385,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SingleChildScrollView(
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,11 +454,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             // 2. TITLE
             TextField(
               controller: _titleController,
+              maxLength: 30,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
               decoration: const InputDecoration(
                 hintText: "Event Title",
                 hintStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.grey),
                 border: InputBorder.none,
+                counterText: '', // Hide default counter text if preferred, removing this line shows it
               ),
             ),
 
@@ -326,6 +483,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                 const Text("Tags (Max 3)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 TextButton.icon(
                   onPressed: () async {
+                    FocusScope.of(context).unfocus();
                     final result = await showDialog<List<TagModel>>(
                       context: context,
                       builder: (_) => _TagPickerDialog(
@@ -333,6 +491,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                         initialSelected: List.from(_selectedTags),
                       ),
                     );
+                    if (!mounted) return;
+                    FocusScope.of(context).unfocus();
                     if (result != null && mounted) {
                       setState(() => _selectedTags
                         ..clear()
@@ -367,6 +527,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             const Text("Location", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             TextField(
               controller: _locationNameController,
+              maxLength: 30,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.location_on, color: Color(0xFF6A1B9A)),
                 hintText: "Venue name (e.g. DKB, Room A101)",
@@ -462,6 +623,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             // MAP BUTTON
             OutlinedButton.icon(
               onPressed: () async {
+                FocusScope.of(context).unfocus();
                 final result = await Navigator.push<LocationResult>(
                   context,
                   MaterialPageRoute(
@@ -470,6 +632,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                     ),
                   ),
                 );
+                if (!mounted) return;
+                FocusScope.of(context).unfocus();
                 if (result != null && mounted) {
                   setState(() {
                     _pinnedLocation = LatLng(result.latitude, result.longitude);
@@ -509,7 +673,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                       Expanded(
                         child: GestureDetector(
                           onTap: () async {
+                            FocusScope.of(context).unfocus();
                             final dt = await _pickDateTime(slot.start);
+                            if (!mounted) return;
+                            FocusScope.of(context).unfocus();
                             if (dt != null) {
                               setState(() => slot.start = dt);
                             }
@@ -542,6 +709,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                       Expanded(
                         child: GestureDetector(
                           onTap: () async {
+                            FocusScope.of(context).unfocus();
                             if (slot.start == null) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Please select a start time first.')),
@@ -552,6 +720,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                               slot.end ?? slot.start, 
                               minDateTime: slot.start,
                             );
+                            if (!mounted) return;
+                            FocusScope.of(context).unfocus();
                             if (dt != null) {
                               setState(() => slot.end = dt);
                             }
@@ -592,17 +762,21 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                 );
               },
             ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => setState(() => _eventTimes.add(_TimeSlot())),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text("Add Another Time", style: TextStyle(fontWeight: FontWeight.bold)),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF6A1B9A),
+            if (_eventTimes.length < 5)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
+                    setState(() => _eventTimes.add(_TimeSlot()));
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text("Add Another Time", style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF6A1B9A),
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: 15),
 
             // 7. CAPACITY
@@ -613,6 +787,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(5),
               ],
               onChanged: (val) {
                 if (val.isNotEmpty) {
@@ -665,6 +840,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(5),
               ],
               onChanged: (val) {
                 if (!_isFree && val.isNotEmpty) {
@@ -687,44 +863,79 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                 prefixText: _isFree ? null : 'RM ',
               ),
             ),
-            const SizedBox(height: 50),
+            const SizedBox(height: 15),
 
-            // 9. ACTION BUTTONS
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
-                    child: const Text("Save as Draft"),
-                  ),
+            // 9. NOTE
+            const Text("Additional Notes", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            TextField(
+              controller: _noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: "E.g. Dress code, things to bring...",
+                prefixIcon: Padding(
+                  padding: EdgeInsets.only(bottom: 35), // Align icon with top of hint text
+                  child: Icon(Icons.note_alt_outlined, color: Color(0xFF6A1B9A)),
                 ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6A1B9A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                    ),
-                    child: const Text("Create Event"),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Cancel", style: TextStyle(color: Colors.red)),
               ),
             ),
+            const SizedBox(height: 50),
+
+            // 10. ACTION BUTTONS
+            if (_isSubmitting)
+              const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A)))
+            else
+              Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => _handleAction('draft'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            side: const BorderSide(color: Color(0xFF6A1B9A)),
+                            foregroundColor: const Color(0xFF6A1B9A),
+                          ),
+                          child: const Text("Save as Draft"),
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => _handleAction('published'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6A1B9A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                          ),
+                          child: const Text("Publish Event"),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () {
+                        FocusScope.of(context).unfocus();
+                        _showConfirmationPrompt(
+                          "Cancel",
+                          "Are you sure you want to cancel event creation? All your progress will be lost.",
+                          () => Navigator.pop(context),
+                        );
+                      },
+                      child: const Text("Cancel", style: TextStyle(color: Colors.red)),
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 30),
           ],
         ),
       ),
+      )
     );
   }
 }
