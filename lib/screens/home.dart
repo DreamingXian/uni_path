@@ -418,8 +418,12 @@ class _HomePageState extends State<HomePage> {
       // 2. Clear the user from global state
       Provider.of<UserProvider>(context, listen: false).logout();
 
-      // 3. Close the drawer and stay on HomePage (now showing as guest)
-      Navigator.pop(context);
+      // 3. Close the drawer and redirect to Login Page
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
+        (route) => false,
+      );
     }
   }
 
