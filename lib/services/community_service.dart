@@ -58,13 +58,28 @@ class CommunityService {
       return [];
     }
   }
-
+/*
   Future<void> updatePost(PostModel post) async {
     try {
       await _supabase.from('posts').update(post.toMap()).eq('id', post.id!);
     } catch (e) {
       log('Error updating post: $e');
       rethrow;
+    }
+  }
+*/
+  // --- NEW: Function to update an existing post ---
+  Future<void> updatePost(int postId, String title, String content, String category, String? locationName) async {
+    final response = await _supabase.from('posts').update({
+      'title': title,
+      'content': content,
+      'category': category,
+      'location_name': locationName,
+    }).eq('id', postId); // Make sure we ONLY update this specific post!
+
+    // Supabase returns an error if something goes wrong
+    if (response != null && response.error != null) {
+      throw Exception(response.error!.message);
     }
   }
 
@@ -139,6 +154,7 @@ class CommunityService {
 
   /// Deletes a specific image record.
   /// Note: This deletes the database record, not the file in Storage.
+  /*
   Future<void> deletePostImage(int imageId) async {
     try {
       await _supabase.from('post_images').delete().eq('id', imageId);
@@ -146,6 +162,18 @@ class CommunityService {
     } catch (e) {
       log('Error deleting post image: $e');
       rethrow;
+    }
+  }
+*/
+  // --- NEW: Function to delete a specific image from a post ---
+  Future<void> deletePostImage(int imageId) async {
+    final response = await _supabase
+        .from('post_images')
+        .delete()
+        .eq('id', imageId);
+
+    if (response != null && response.error != null) {
+      throw Exception(response.error!.message);
     }
   }
 
