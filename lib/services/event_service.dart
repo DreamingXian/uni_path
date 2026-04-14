@@ -1,4 +1,5 @@
 import 'dart:developer';
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/event_model.dart';
 import '../models/event_time_model.dart';
@@ -8,6 +9,20 @@ class EventService {
   final _supabase = Supabase.instance.client;
 
   // --- EVENT OPERATIONS ---
+
+  /// Upload poster image to supabase storage and return the public URL
+  Future<String?> uploadPoster(File imageFile) async {
+    try {
+      final fileExtension = imageFile.path.split('.').last;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_poster.$fileExtension';
+      await _supabase.storage.from('posters').upload(fileName, imageFile);
+      final publicUrl = _supabase.storage.from('posters').getPublicUrl(fileName);
+      return publicUrl;
+    } catch (e) {
+      log('Error uploading poster: $e');
+      return null;
+    }
+  }
 
   /// Creates a new event. The 'created_by' is handled by the database default auth.uid().
   Future<int?> insertEvent(EventModel event) async {
