@@ -6,7 +6,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/tag_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../models/tag_model.dart';
 import '../../models/event_model.dart';
 import '../../models/event_time_model.dart';
 import '../../services/event_service.dart';
