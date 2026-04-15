@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../providers/user_provider.dart';
 import '../../models/event_model.dart';
 import '../../services/event_service.dart';
+import 'update_event.dart';
 
 class ManageEventsScreen extends StatefulWidget {
   const ManageEventsScreen({super.key});
@@ -41,7 +42,10 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
   }
 
   Future<void> _fetchMyEvents() async {
+    setState(() => _isLoading = true);
+
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+
     if (user == null) {
       setState(() => _isLoading = false);
       return;
@@ -301,7 +305,10 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
                               child: Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A))),
                             );
                           }
-                          return _EventCard(event: _filteredEvents[index]);
+                          return _EventCard(
+                            event: _filteredEvents[index],
+                            onRefresh: _fetchMyEvents,
+                          );
                         },
                       ),
           )
@@ -317,8 +324,9 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
 
 class _EventCard extends StatelessWidget {
   final EventModel event;
+  final VoidCallback onRefresh;
 
-  const _EventCard({required this.event});
+  const _EventCard({required this.event, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -332,8 +340,14 @@ class _EventCard extends StatelessWidget {
     List<String> formattedSchedules = [];
     if (event.eventTimes != null) {
       formattedSchedules = event.eventTimes!.map((time) {
-        final start = DateFormat('dd MMM yyyy, hh:mm a').format(time.startDateTime);
-        final end = DateFormat('hh:mm a').format(time.endDateTime);
+        final startFormat = DateFormat('dd MMM yyyy, hh:mm a');
+        final endFormat = (time.startDateTime.year == time.endDateTime.year && 
+                           time.startDateTime.month == time.endDateTime.month && 
+                           time.startDateTime.day == time.endDateTime.day) 
+                           ? DateFormat('hh:mm a') 
+                           : DateFormat('dd MMM yyyy, hh:mm a');
+        final start = startFormat.format(time.startDateTime);
+        final end = endFormat.format(time.endDateTime);
         return "$start ~ $end"; 
       }).toList();
     }
@@ -344,8 +358,14 @@ class _EventCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          // TODO: Navigate to event details
+        onTap: () async{
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UpdateEventScreen(event: event),
+            ),
+          );
+          onRefresh();
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
