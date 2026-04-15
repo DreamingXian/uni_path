@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../providers/user_provider.dart';
 import '../../models/event_model.dart';
 import '../../services/event_service.dart';
+import 'update_event.dart';
 
 class ManageEventsScreen extends StatefulWidget {
   const ManageEventsScreen({super.key});
@@ -345,7 +346,12 @@ class _EventCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          // TODO: Navigate to event details
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UpdateEventScreen(event: event),
+            ),
+          );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
