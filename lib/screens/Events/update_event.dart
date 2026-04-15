@@ -233,42 +233,61 @@ class UpdateEventScreen extends StatelessWidget {
 
             // 9. Buttons
             if (canEdit)
-              Row(
+              Column(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _handleCancelEvent(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        side: const BorderSide(color: Colors.red),
-                        foregroundColor: Colors.red,
-                      ),
-                      child: const Text("Cancel Event"),
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final bool? success = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (ctx) => EditEventFormScreen(event: event),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => currentStatus == 'draft' ? _handleDeleteDraft(context) : _handleCancelEvent(context),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            side: const BorderSide(color: Colors.red),
+                            foregroundColor: Colors.red,
                           ),
-                        );
-                        // If the edit form returned true (success), we drop back to automatically reload Manage Events.
-                        if (success == true && context.mounted) {
-                          Navigator.pop(context); 
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6A1B9A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 15),
+                          child: Text(currentStatus == 'draft' ? "Delete" : "Cancel Event"),
+                        ),
                       ),
-                      child: const Text("Update"),
-                    ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final bool? success = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (ctx) => EditEventFormScreen(event: event),
+                              ),
+                            );
+                            // If the edit form returned true (success), we drop back to automatically reload Manage Events.
+                            if (success == true && context.mounted) {
+                              Navigator.pop(context); 
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6A1B9A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                          ),
+                          child: Text("Update"),
+                        ),
+                      ),
+                    ],
                   ),
+                  if (currentStatus == 'draft') ...[
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => _handlePublishDraft(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green, // Visual distinction for positive completion action
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                        ),
+                        child: const Text("Publish Event", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ]
                 ],
               )
             else
@@ -362,6 +381,143 @@ class UpdateEventScreen extends StatelessWidget {
       if (context.mounted) {
         Navigator.pop(context); // close loading
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel event: $e')));
+      }
+    }
+  }
+
+  Future<void> _handleDeleteDraft(BuildContext context) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text("Delete Draft", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        content: const Text("Are you sure you want to permanently delete this drafted event?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Keep Draft", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Delete", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context, 
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A))),
+    );
+
+    try {
+      final eventService = EventService();
+      await eventService.deleteEvent(event.id!); // Physically deletes item
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Draft successfully deleted.')));
+        Navigator.pop(context, true); 
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete draft: $e')));
+      }
+    }
+  }
+
+  Future<void> _handlePublishDraft(BuildContext context) async {
+    if (event.eventTimes == null || event.eventTimes!.isEmpty) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cannot publish without a valid schedule. Please save changes first.")));
+       return;
+    }
+
+    DateTime maxEnd = event.eventTimes!.first.endDateTime;
+    for (var t in event.eventTimes!) {
+      if (t.endDateTime.isAfter(maxEnd)) maxEnd = t.endDateTime;
+    }
+
+    if (DateTime.now().isAfter(maxEnd)) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Text("Schedule Expired", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          content: const Text("The scheduled time for this event has already passed. Please update the schedule time before publishing."),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx), 
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A1B9A)),
+              child: const Text("OK", style: TextStyle(color: Colors.white))
+            ),
+          ],
+        )
+      );
+      return;
+    }
+
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text("Publish Event", style: TextStyle(color: Color(0xFF6A1B9A), fontWeight: FontWeight.bold)),
+        content: const Text("Are you ready to officially publish this event online?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A1B9A)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Publish Now", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context, 
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A))),
+    );
+
+    try {
+      final eventService = EventService();
+      final publishedEvent = EventModel(
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        locationName: event.locationName,
+        latitude: event.latitude,
+        longitude: event.longitude,
+        status: 'published',
+        createdBy: event.createdBy,
+        fees: event.fees,
+        capacity: event.capacity,
+        eventPosterUrl: event.eventPosterUrl,
+        note: event.note,
+      );
+      
+      await eventService.updateEvent(publishedEvent);
+      
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event successfully published!')));
+        Navigator.pop(context, true); 
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to publish event: $e')));
       }
     }
   }

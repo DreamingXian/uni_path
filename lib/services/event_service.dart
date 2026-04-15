@@ -130,6 +130,16 @@ class EventService {
     }
   }
 
+  Future<void> deleteEvent(int eventId) async {
+    try {
+      await _supabase.from('events').delete().eq('id', eventId);
+      log('Event deleted successfully: $eventId');
+    } catch (e) {
+      log('Error deleting event: $e');
+      rethrow;
+    }
+  }
+
   /// Extracts the direct Email addresses of any user currently holding an active 
   /// ticket to the specified Event mapping through the synced users table.
   Future<List<String>> getParticipantEmails(int eventId) async {
