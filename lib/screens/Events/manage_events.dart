@@ -42,7 +42,10 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
   }
 
   Future<void> _fetchMyEvents() async {
+    setState(() => _isLoading = true);
+
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+
     if (user == null) {
       setState(() => _isLoading = false);
       return;
@@ -302,7 +305,10 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
                               child: Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A))),
                             );
                           }
-                          return _EventCard(event: _filteredEvents[index]);
+                          return _EventCard(
+                            event: _filteredEvents[index],
+                            onRefresh: _fetchMyEvents,
+                          );
                         },
                       ),
           )
@@ -318,8 +324,9 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
 
 class _EventCard extends StatelessWidget {
   final EventModel event;
+  final VoidCallback onRefresh;
 
-  const _EventCard({required this.event});
+  const _EventCard({required this.event, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -351,13 +358,14 @@ class _EventCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          Navigator.push(
+        onTap: () async{
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => UpdateEventScreen(event: event),
             ),
           );
+          onRefresh();
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
