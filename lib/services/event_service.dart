@@ -112,10 +112,43 @@ class EventService {
 
   Future<void> updateEvent(EventModel event) async {
     try {
-      await _supabase.from('events').update(event.toMap()).eq('id', event.id!);
+      await _supabase.from('events').update({
+        'title': event.title,
+        'description': event.description,
+        'location_name': event.locationName,
+        'latitude': event.latitude,
+        'longitude': event.longitude,
+        'capacity': event.capacity,
+        'note': event.note,
+        // fees is intentionally omitted to restrict overriding later on!
+      }).eq('id', event.id!);
+      log('Event updated successfully: ${event.id}');
     } catch (e) {
-      log('Error updating event: $e');
+      log('Error updating event data: $e');
       rethrow;
+    }
+  }
+
+  /// Extracts the direct Email addresses of any user currently holding an active 
+  /// ticket to the specified Event mapping through the synced users table.
+  Future<List<String>> getParticipantEmails(int eventId) async {
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('users!inner(email)')
+          .eq('event_id', eventId)
+          .eq('status', 'active'); // only active participants
+
+      List<String> emails = [];
+      for (var row in response as List) {
+        if (row['users'] != null && row['users']['email'] != null) {
+          emails.add(row['users']['email'].toString());
+        }
+      }
+      return emails.toSet().toList();
+    } catch (e) {
+      log('Error fetching participant emails: $e');
+      return [];
     }
   }
 
@@ -214,6 +247,19 @@ class EventService {
       log('Tags linked to event $eventId');
     } catch (e) {
       log('Error linking tags to event: $e');
+      rethrow;
+    }
+  }
+
+  /// Replaces all tags for a specific event by clearing and re-inserting
+  Future<void> replaceEventTags(int eventId, List<int> tagIds) async {
+    try {
+      await _supabase.from('event_tags').delete().eq('event_id', eventId);
+      if (tagIds.isNotEmpty) {
+        await addTagsToEvent(eventId, tagIds);
+      }
+    } catch (e) {
+      log('Error replacing tags for event: $e');
       rethrow;
     }
   }

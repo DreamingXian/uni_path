@@ -47,6 +47,7 @@ dependencies:
   geocoding: ^4.0.0
   http: ^1.2.2
   url_launcher: ^6.3.2
+  mailer: ^7.1.0
 
 dev_dependencies:
   flutter_test:

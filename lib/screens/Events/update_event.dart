@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/event_model.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'edit_event_form.dart';
 
 class UpdateEventScreen extends StatelessWidget {
   final EventModel event;
@@ -218,8 +219,17 @@ class UpdateEventScreen extends StatelessWidget {
                 const SizedBox(width: 15),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      // TODO: Implement Update flow logic
+                    onPressed: () async {
+                      final bool? success = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (ctx) => EditEventFormScreen(event: event),
+                        ),
+                      );
+                      // If the edit form returned true (success), we drop back to automatically reload Manage Events.
+                      if (success == true && context.mounted) {
+                        Navigator.pop(context); 
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF6A1B9A),
