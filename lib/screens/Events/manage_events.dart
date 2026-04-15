@@ -333,8 +333,14 @@ class _EventCard extends StatelessWidget {
     List<String> formattedSchedules = [];
     if (event.eventTimes != null) {
       formattedSchedules = event.eventTimes!.map((time) {
-        final start = DateFormat('dd MMM yyyy, hh:mm a').format(time.startDateTime);
-        final end = DateFormat('hh:mm a').format(time.endDateTime);
+        final startFormat = DateFormat('dd MMM yyyy, hh:mm a');
+        final endFormat = (time.startDateTime.year == time.endDateTime.year && 
+                           time.startDateTime.month == time.endDateTime.month && 
+                           time.startDateTime.day == time.endDateTime.day) 
+                           ? DateFormat('hh:mm a') 
+                           : DateFormat('dd MMM yyyy, hh:mm a');
+        final start = startFormat.format(time.startDateTime);
+        final end = endFormat.format(time.endDateTime);
         return "$start ~ $end"; 
       }).toList();
     }

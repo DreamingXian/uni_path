@@ -5,7 +5,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/tag_model.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/event_model.dart';
 import '../../models/event_time_model.dart';
 import '../../services/event_service.dart';
@@ -309,8 +308,15 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
 
     if (oldTimes != newTimes) {
       final formattedTimes = validTimes.map((t) {
-        final start = DateFormat('dd MMM yyyy, hh:mm a').format(t.start!);
-        final end = DateFormat('hh:mm a').format(t.end ?? t.start!);
+        final startFormat = DateFormat('dd MMM yyyy, hh:mm a');
+        final endDate = t.end ?? t.start!;
+        final endFormat = (t.start!.year == endDate.year && 
+                           t.start!.month == endDate.month && 
+                           t.start!.day == endDate.day) 
+                           ? DateFormat('hh:mm a') 
+                           : DateFormat('dd MMM yyyy, hh:mm a');
+        final start = startFormat.format(t.start!);
+        final end = endFormat.format(endDate);
         return "<li>$start ~ $end</li>";
       }).join("");
       changes.add("<b>New Schedule:</b> <ul>$formattedTimes</ul>");

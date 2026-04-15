@@ -120,6 +120,7 @@ class EventService {
         'longitude': event.longitude,
         'capacity': event.capacity,
         'note': event.note,
+        'status': event.status,
         // fees is intentionally omitted to restrict overriding later on!
       }).eq('id', event.id!);
       log('Event updated successfully: ${event.id}');

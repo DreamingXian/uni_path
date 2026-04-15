@@ -56,4 +56,41 @@ class EmailService {
       }
     }
   }
+
+  /// Sends a cancellation email notification to all active participants.
+  static Future<void> sendEventCancellationNotification({
+    required List<String> bccEmails,
+    required String eventTitle,
+  }) async {
+    final email = dotenv.env['SMTP_EMAIL'];
+    final password = dotenv.env['SMTP_APP_PASSWORD'];
+
+    if (email == null || password == null || email.isEmpty || password.isEmpty) return;
+    if (bccEmails.isEmpty) return;
+
+    final smtpServer = gmail(email, password);
+
+    final message = Message()
+      ..from = Address(email, 'UniPath Event Updates')
+      ..bccRecipients.addAll(bccEmails)
+      ..subject = 'Event Cancelled: $eventTitle'
+      ..html = '''
+        <div style="font-family: sans-serif; color: #333; line-height: 1.6;">
+          <h2 style="color: #D32F2F;">Event Cancellation Notice</h2>
+          <p>Dear Participant,</p>
+          <p>We regret to inform you that the event <b>$eventTitle</b> has been cancelled by the organizer.</p>
+          <p>We sincerely apologize for any inconvenience this late cancellation may have caused.</p>
+          <br>
+          <p>Best Regards,</p>
+          <p><b>Your Society via UniPath</b></p>
+        </div>
+      ''';
+
+    try {
+      await send(message, smtpServer);
+      log('Cancellation email successfully dispatched!');
+    } catch (e) {
+      log('Email dispatch failed: $e');
+    }
+  }
 }
