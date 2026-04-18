@@ -2,74 +2,116 @@ import 'package:flutter/material.dart';
 
 import 'event_details.dart';
 
-class EventTime {
-  final String date;
-  final String startTime;
-  final String endTime;
-
-  EventTime({required this.date, required this.startTime, required this.endTime});
-}
-
-class DummyEvent {
-  final String title;
-  final String description;
-  final String location;
-  final List<EventTime> timings; // Updated to hold start and end times
-  final List<String> tags;
-  final double fees;
-  final String imageUrl;
-
-  DummyEvent({
-    required this.title,
-    required this.description,
-    required this.location,
-    required this.timings,
-    required this.tags,
-    required this.fees,
-    required this.imageUrl,
-  });
-}
+import '../../services/event_service.dart';
+import '../../models/event_model.dart';
+import 'package:intl/intl.dart';
 
 class EventsScreen extends StatefulWidget {
-  const EventsScreen({super.key});
+  final String searchQuery;
+  
+  const EventsScreen({super.key, this.searchQuery = ''});
 
   @override
   State<EventsScreen> createState() => _EventsScreenState();
 }
 
 class _EventsScreenState extends State<EventsScreen> {
+  final EventService _eventService = EventService();
+  bool _isLoading = true;
+  List<EventModel> _allEvents = [];
+  List<EventModel> _filteredEvents = [];
+
+  // Filters and Sorting
   bool isFreeOnly = false;
+  int _timeSortType = 0; // 0: Recent Created, 1: Nearest Event, 2: Farthest Event
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchEvents();
+  }
+
+  @override
+  void didUpdateWidget(EventsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchQuery != widget.searchQuery) {
+      _applyFilters();
+    }
+  }
+
+  Future<void> _fetchEvents() async {
+    try {
+      final events = await _eventService.getAllPublishedEvents();
+      if (mounted) {
+        setState(() {
+          _allEvents = events;
+          _isLoading = false;
+        });
+        _applyFilters();
+      }
+    } catch (e) {
+      debugPrint("Error fetching events: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _applyFilters() {
+    setState(() {
+      _filteredEvents = _allEvents.where((e) {
+        // Exclude Ongoing and Ended events (only show those that have not started)
+        if (e.eventTimes != null && e.eventTimes!.isNotEmpty) {
+          final now = DateTime.now();
+          bool hasStarted = e.eventTimes!.any((t) => t.startDateTime.isBefore(now));
+          if (hasStarted) return false;
+        }
+
+        // Global Search filter (Title + Tags)
+        if (widget.searchQuery.isNotEmpty) {
+          final query = widget.searchQuery.toLowerCase();
+          bool matchesTitle = e.title.toLowerCase().contains(query);
+          bool matchesTag = false;
+          if (e.tags != null) {
+            matchesTag = e.tags!.any((tag) => tag.name.toLowerCase().contains(query));
+          }
+          if (!matchesTitle && !matchesTag) return false;
+        }
+
+        // Free filter
+        if (isFreeOnly && (e.fees ?? 0) > 0) return false;
+
+        return true;
+      }).toList();
+
+      // Deep Sorting Logic
+      _filteredEvents.sort((a, b) {
+        if (_timeSortType == 0) {
+          // 0: Most recent created (Desc)
+          return b.createdAt.compareTo(a.createdAt);
+        } else {
+          // 1: Nearest Event, 2: Farthest Event
+          DateTime getStart(EventModel event) {
+             if (event.eventTimes == null || event.eventTimes!.isEmpty) {
+                 // Push events with no times to the rear of the respective lists
+                 return _timeSortType == 1 ? DateTime(3000) : DateTime(1970);
+             }
+             List<DateTime> starts = event.eventTimes!.map((t) => t.startDateTime).toList();
+             starts.sort(); // earliest first
+             return starts.first; 
+          }
+          DateTime startA = getStart(a);
+          DateTime startB = getStart(b);
+          if (_timeSortType == 1) {
+             return startA.compareTo(startB); // Asc
+          } else {
+             return startB.compareTo(startA); // Desc
+          }
+        }
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    // 1. Expanded Dummy Data
-    final List<DummyEvent> dummyEvents = [
-      DummyEvent(
-        title: "TARUMT Tech Hackathon 2026",
-        description: "Join the ultimate 48-hour coding challenge! Build innovative solutions for campus life.",
-        location: "DKB, TARUMT Main Campus",
-        timings: [
-          EventTime(date: "20 May", startTime: "09:00 AM", endTime: "05:00 PM"),
-          EventTime(date: "21 May", startTime: "09:00 AM", endTime: "09:00 PM"),
-        ],
-        tags: ["Workshop", "Hackathon"],
-        fees: 0.0,
-        imageUrl: "https://picsum.photos/seed/tech/600/300",
-      ),
-      DummyEvent(
-        title: "Career Fair: Future Leaders",
-        description: "Connect with over 50 top companies looking for fresh graduates.",
-        location: "Main Hall, Block A",
-        timings: [
-          EventTime(date: "02 June", startTime: "10:00 AM", endTime: "04:00 PM"),
-          EventTime(date: "03 June", startTime: "10:00 AM", endTime: "04:00 PM"),
-        ],
-        tags: ["Career", "Networking"],
-        fees: 5.0,
-        imageUrl: "https://picsum.photos/seed/career/600/300",
-      ),
-    ];
-
     return Column(
       children: [
         // --- FILTERING ROW ---
@@ -77,11 +119,20 @@ class _EventsScreenState extends State<EventsScreen> {
 
         // --- EVENT LIST ---
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            itemCount: dummyEvents.length,
-            itemBuilder: (context, index) => _buildEventCard(context, dummyEvents[index]),
-          ),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A)))
+              : _filteredEvents.isEmpty
+                  ? const Center(child: Text("No events found.", style: TextStyle(color: Colors.grey)))
+                  : RefreshIndicator(
+                      onRefresh: _fetchEvents,
+                      color: const Color(0xFF6A1B9A),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        physics: const AlwaysScrollableScrollPhysics(), // Ensures it can be pulled even if list is short
+                        itemCount: _filteredEvents.length,
+                        itemBuilder: (context, index) => _buildEventCard(context, _filteredEvents[index]),
+                      ),
+                    ),
         ),
       ],
     );
@@ -97,12 +148,9 @@ class _EventsScreenState extends State<EventsScreen> {
       ),
       child: Row(
         children: [
-          // Date Filter (Left)
-          _buildFilterButton(Icons.calendar_month, "Date"),
+          // Time Sorting Toggle
+          _buildTimeSortButton(),
           const Spacer(),
-          // Tag Filter (Middle-Right)
-          _buildFilterButton(Icons.local_offer, "Tags"),
-          const SizedBox(width: 12),
           // Free Only Toggle (Most Right)
           Row(
             children: [
@@ -112,7 +160,10 @@ class _EventsScreenState extends State<EventsScreen> {
                 child: Checkbox(
                   value: isFreeOnly,
                   activeColor: const Color(0xFF6A1B9A),
-                  onChanged: (val) => setState(() => isFreeOnly = val!),
+                  onChanged: (val) {
+                    setState(() => isFreeOnly = val!);
+                    _applyFilters();
+                  },
                 ),
               ),
             ],
@@ -122,9 +173,27 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 
-  Widget _buildFilterButton(IconData icon, String label) {
+  Widget _buildTimeSortButton() {
+    IconData icon;
+    String label;
+    if (_timeSortType == 0) {
+      icon = Icons.access_time;
+      label = "Most Recent";
+    } else if (_timeSortType == 1) {
+      icon = Icons.arrow_downward;
+      label = "Nearest Event";
+    } else {
+      icon = Icons.arrow_upward;
+      label = "Farthest Event";
+    }
+
     return OutlinedButton.icon(
-      onPressed: () {},
+      onPressed: () {
+        setState(() {
+          _timeSortType = (_timeSortType + 1) % 3;
+          _applyFilters();
+        });
+      },
       icon: Icon(icon, size: 16, color: const Color(0xFF1A237E)),
       label: Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF1A237E))),
       style: OutlinedButton.styleFrom(
@@ -135,7 +204,23 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   // 3. Updated Event Card
-  Widget _buildEventCard(BuildContext context, DummyEvent event) {
+  Widget _buildEventCard(BuildContext context, EventModel event) {
+    // Format times
+    List<String> formattedSchedules = [];
+    if (event.eventTimes != null) {
+      formattedSchedules = event.eventTimes!.map((time) {
+        final startFormat = DateFormat('dd MMM yyyy, hh:mm a');
+        final endFormat = (time.startDateTime.year == time.endDateTime.year && 
+                           time.startDateTime.month == time.endDateTime.month && 
+                           time.startDateTime.day == time.endDateTime.day) 
+                           ? DateFormat('hh:mm a') 
+                           : DateFormat('dd MMM yyyy, hh:mm a');
+        final start = startFormat.format(time.startDateTime);
+        final end = endFormat.format(time.endDateTime);
+        return "$start ~ $end"; 
+      }).toList();
+    }
+
     return InkWell(
       onTap: (){
         Navigator.push(
@@ -155,7 +240,9 @@ class _EventsScreenState extends State<EventsScreen> {
           children: [
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: Image.network(event.imageUrl, fit: BoxFit.cover),
+              child: (event.eventPosterUrl != null && event.eventPosterUrl!.isNotEmpty)
+                  ? Image.network(event.eventPosterUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _buildPlaceholder())
+                  : _buildPlaceholder(),
             ),
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -171,14 +258,15 @@ class _EventsScreenState extends State<EventsScreen> {
                           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
                         ),
                       ),
-                      _buildFeeTag(event.fees),
+                      _buildFeeTag(event.fees ?? 0.0),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    children: event.tags.map((tag) => Text("#$tag", style: const TextStyle(color: Color(0xFF6A1B9A), fontSize: 12, fontWeight: FontWeight.bold))).toList(),
-                  ),
+                  if (event.tags != null && event.tags!.isNotEmpty)
+                    Wrap(
+                      spacing: 8,
+                      children: event.tags!.map((tag) => Text("#${tag.name}", style: const TextStyle(color: Color(0xFF6A1B9A), fontSize: 12, fontWeight: FontWeight.bold))).toList(),
+                    ),
                   const SizedBox(height: 12),
 
                   // --- LOCATION ---
@@ -186,7 +274,7 @@ class _EventsScreenState extends State<EventsScreen> {
                     children: [
                       const Icon(Icons.location_on, size: 14, color: Color(0xFF6A1B9A)),
                       const SizedBox(width: 4),
-                      Text(event.location, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                      Text(event.locationName ?? 'No location provided', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                     ],
                   ),
                   const Divider(height: 20),
@@ -194,23 +282,24 @@ class _EventsScreenState extends State<EventsScreen> {
                   // --- SHOW ALL TIME SLOTS ---
                   const Text("Schedules:", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
                   const SizedBox(height: 4),
-                  ...event.timings.map((time) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4.0),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.access_time, size: 12, color: Colors.grey),
-                        const SizedBox(width: 6),
-                        Text(
-                          "${time.date}: ",
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
-                        ),
-                        Text(
-                          "${time.startTime} - ${time.endTime}",
-                          style: const TextStyle(fontSize: 12, color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                  )),
+                  if (formattedSchedules.isEmpty)
+                    const Text("No specific times.", style: TextStyle(fontSize: 12, color: Colors.black54))
+                  else
+                    ...formattedSchedules.map((timeStr) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 12, color: Colors.grey),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              timeStr,
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
                 ],
               ),
             ),
@@ -219,6 +308,13 @@ class _EventsScreenState extends State<EventsScreen> {
       ),
     );
 
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: Colors.grey[300],
+      child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey)),
+    );
   }
 
   Widget _buildFeeTag(double fee) {

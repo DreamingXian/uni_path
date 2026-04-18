@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'events_screen.dart'; // To access DummyEvent and EventTime classes
 
+import '../../models/event_model.dart';
+
 class EventDetailScreen extends StatelessWidget {
-  final DummyEvent event;
+  final EventModel event;
 
   const EventDetailScreen({super.key, required this.event});
 
   @override
   Widget build(BuildContext context) {
-    bool isFree = event.fees == 0.0;
+    bool isFree = (event.fees ?? 0.0) == 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -25,12 +27,18 @@ class EventDetailScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 1. FULL POSTER
-            Image.network(
-              event.imageUrl,
-              width: double.infinity,
-              height: 250,
-              fit: BoxFit.cover,
-            ),
+            if (event.eventPosterUrl != null && event.eventPosterUrl!.isNotEmpty)
+              Image.network(
+                event.eventPosterUrl!,
+                width: double.infinity,
+                height: 250,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                   width: double.infinity, height: 250, color: Colors.grey[300], child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey))
+                ),
+              )
+            else
+              Container(width: double.infinity, height: 250, color: Colors.grey[300], child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey))),
 
             Padding(
               padding: const EdgeInsets.all(20.0),
@@ -45,10 +53,11 @@ class EventDetailScreen extends StatelessWidget {
                   const SizedBox(height: 10),
 
                   // 3. DESCRIPTION
-                  Text(
-                    event.description,
-                    style: TextStyle(fontSize: 16, color: Colors.grey[800], height: 1.5),
-                  ),
+                  if (event.description != null)
+                    Text(
+                      event.description!,
+                      style: TextStyle(fontSize: 16, color: Colors.grey[800], height: 1.5),
+                    ),
                   const Divider(height: 40),
 
                   // 4. LOCATION NAME
@@ -58,7 +67,7 @@ class EventDetailScreen extends StatelessWidget {
                     children: [
                       const Icon(Icons.location_on, color: Color(0xFF6A1B9A)),
                       const SizedBox(width: 8),
-                      Text(event.location, style: const TextStyle(fontSize: 16)),
+                      Text(event.locationName ?? 'No location provided', style: const TextStyle(fontSize: 16)),
                     ],
                   ),
                   const SizedBox(height: 15),
@@ -86,31 +95,32 @@ class EventDetailScreen extends StatelessWidget {
                   // 6. EVENT TIMES
                   const Text("Event Schedule", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
-                  ...event.timings.map((time) => Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6A1B9A).withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.access_time, size: 20, color: Color(0xFF6A1B9A)),
-                        const SizedBox(width: 12),
-                        Text(
-                          "${time.date}: ${time.startTime} - ${time.endTime}",
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  )),
+                  if (event.eventTimes != null)
+                    ...event.eventTimes!.map((time) => Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6A1B9A).withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 20, color: Color(0xFF6A1B9A)),
+                          const SizedBox(width: 12),
+                          Text(
+                            "${time.startDateTime.day}/${time.startDateTime.month}/${time.startDateTime.year}: ${time.startDateTime.hour}:${time.startDateTime.minute.toString().padLeft(2, '0')}",
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    )),
                   const SizedBox(height: 20),
 
                   // 7. FEES
                   const Text("Entry Fees", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Text(
-                    isFree ? "Complimentary (FREE)" : "RM ${event.fees.toStringAsFixed(2)} per person",
+                    isFree ? "Complimentary (FREE)" : "RM ${(event.fees ?? 0).toStringAsFixed(2)} per person",
                     style: TextStyle(
                       fontSize: 16,
                       color: isFree ? Colors.green[700] : const Color(0xFF1A237E),

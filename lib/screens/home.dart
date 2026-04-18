@@ -26,10 +26,18 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // navigator pages
-  final List<Widget> _pages = [
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  // navigator pages dynamically generated to pass states down
+  List<Widget> get _pages => [
     const CommunityScreen(), // Index 0
-    const EventsScreen(),    // Index 1
+    EventsScreen(searchQuery: _searchController.text), // Index 1 receives live search
     const ScheduleScreen(),  // Index 2
     const ProfileScreen(),   // Index 3
   ];
@@ -84,7 +92,9 @@ class _HomePageState extends State<HomePage> {
             onPressed: () {
               setState(() {
                 _isSearching = !_isSearching;
-                if (!_isSearching) _searchController.clear();
+                if (!_isSearching) {
+                   _searchController.clear();
+                }
               });
             },
           ),

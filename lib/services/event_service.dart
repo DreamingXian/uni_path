@@ -45,7 +45,7 @@ class EventService {
     try {
       final response = await _supabase
           .from('events')
-          .select()
+          .select('*, event_times(*), event_tags(tags(*))')
           .eq('status', 'published')
           .order('created_at', ascending: false);
       return (response as List).map((json) => EventModel.fromJson(json)).toList();

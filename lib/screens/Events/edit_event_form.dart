@@ -350,6 +350,7 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
         capacity: capacityVal,
         eventPosterUrl: posterUrl,
         note: _noteController.text.trim(),
+        createdAt: widget.event.createdAt,
       );
 
       final changesDesc = _getChangesDescription();

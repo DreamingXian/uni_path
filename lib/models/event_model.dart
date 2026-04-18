@@ -14,6 +14,7 @@ class EventModel {
   final int? capacity;
   final String? eventPosterUrl;
   final String? note;
+  final DateTime createdAt;
   
   // Embedded Relational Data
   final List<EventTimeModel>? eventTimes;
@@ -23,7 +24,7 @@ class EventModel {
     this.id, required this.title, this.description, this.locationName,
     this.latitude, this.longitude, required this.status, required this.createdBy,
     this.fees, this.capacity, this.eventPosterUrl, this.note,
-    this.eventTimes, this.tags,
+    this.eventTimes, this.tags, required this.createdAt,
   });
 
   factory EventModel.fromJson(Map<String, dynamic> json) {
@@ -52,6 +53,7 @@ class EventModel {
       note: json['note'],
       eventTimes: parsedTimes,
       tags: parsedTags,
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
     );
   }
 
