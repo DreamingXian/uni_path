@@ -313,6 +313,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         capacity: capacityVal,
         eventPosterUrl: posterUrl,
         note: _noteController.text.trim(),
+        createdAt: DateTime.now(),
       );
 
       final eventId = await _eventService.insertEvent(event);

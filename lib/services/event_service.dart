@@ -45,7 +45,7 @@ class EventService {
     try {
       final response = await _supabase
           .from('events')
-          .select()
+          .select('*, event_times(*), event_tags(tags(*))')
           .eq('status', 'published')
           .order('created_at', ascending: false);
       return (response as List).map((json) => EventModel.fromJson(json)).toList();
@@ -160,6 +160,21 @@ class EventService {
     } catch (e) {
       log('Error fetching participant emails: $e');
       return [];
+    }
+  }
+
+  /// Calculates total enrolled tickets for a specific event
+  Future<int> getTicketCount(int eventId) async {
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('id')
+          .eq('event_id', eventId)
+          .eq('status', 'active');
+      return (response as List).length;
+    } catch (e) {
+      log('Error getting ticket count: $e');
+      return 0;
     }
   }
 

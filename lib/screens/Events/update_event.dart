@@ -360,6 +360,7 @@ class UpdateEventScreen extends StatelessWidget {
         capacity: event.capacity,
         eventPosterUrl: event.eventPosterUrl,
         note: event.note,
+        createdAt: event.createdAt,
       );
       await eventService.updateEvent(cancelledEvent);
 
@@ -505,6 +506,7 @@ class UpdateEventScreen extends StatelessWidget {
         capacity: event.capacity,
         eventPosterUrl: event.eventPosterUrl,
         note: event.note,
+        createdAt: event.createdAt,
       );
       
       await eventService.updateEvent(publishedEvent);
