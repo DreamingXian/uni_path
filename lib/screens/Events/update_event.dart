@@ -229,9 +229,29 @@ class UpdateEventScreen extends StatelessWidget {
                ),
             ],
 
+            // 9. Payment QR
+            if (event.paymentQrUrl != null && event.paymentQrUrl!.isNotEmpty)...[
+               const SizedBox(height: 25),
+               const Text("Payment QR Code", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+               const SizedBox(height: 10),
+               Container(
+                 width: double.infinity,
+                 height: 200,
+                 decoration: BoxDecoration(
+                   color: Colors.grey[100],
+                   borderRadius: BorderRadius.circular(12),
+                   border: Border.all(color: Colors.grey.shade300),
+                 ),
+                 child: ClipRRect(
+                   borderRadius: BorderRadius.circular(12),
+                   child: Image.network(event.paymentQrUrl!, fit: BoxFit.contain),
+                 ),
+               ),
+            ],
+
             const SizedBox(height: 40),
 
-            // 9. Buttons
+            // 10. Buttons
             if (canEdit)
               Column(
                 children: [

@@ -46,6 +46,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
   // --- Poster image state ---
   File? _posterImage;
+  File? _paymentQrImage;
   final ImagePicker _picker = ImagePicker();
   final EventService _eventService = EventService();
 
@@ -195,6 +196,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     }
   }
 
+  Future<void> _pickPaymentQrFromSource(ImageSource source) async {
+    final XFile? picked = await _picker.pickImage(
+      source: source,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      setState(() => _paymentQrImage = File(picked.path));
+    }
+  }
+
   // Dialog shown when user taps an already-set poster
   Future<_PosterAction?> _showChangeImageDialog() async {
     return await showDialog<_PosterAction>(
@@ -232,6 +243,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event title is required.')));
+      return;
+    }
+
+    if (_paymentQrImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment QR Code is required for all events.')));
       return;
     }
 
@@ -295,6 +311,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         posterUrl = await _eventService.uploadPoster(_posterImage!);
       }
 
+      String? paymentQrUrl;
+      if (_paymentQrImage != null) {
+        paymentQrUrl = await _eventService.uploadPaymentQR(_paymentQrImage!);
+      }
+
       final feesVal = _isFree ? 0.0 : double.tryParse(_feeController.text.trim());
       final capacityVal = int.tryParse(_capacityController.text.trim());
       final user = Supabase.instance.client.auth.currentUser;
@@ -313,6 +334,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         capacity: capacityVal,
         eventPosterUrl: posterUrl,
         note: _noteController.text.trim(),
+        paymentQrUrl: paymentQrUrl,
         createdAt: DateTime.now(),
       );
 
@@ -877,6 +899,81 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                   padding: EdgeInsets.only(bottom: 35), // Align icon with top of hint text
                   child: Icon(Icons.note_alt_outlined, color: Color(0xFF6A1B9A)),
                 ),
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            // 10. PAYMENT QR UPLOAD
+            const Text("Payment QR Code", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            GestureDetector(
+              onTap: () async {
+                FocusScope.of(context).unfocus();
+                showModalBottomSheet(
+                  context: context,
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                  builder: (ctx) => SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: 10),
+                        Container(
+                          width: 40,
+                          height: 5,
+                          decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Upload Society Payment QR',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+                        ),
+                        const SizedBox(height: 8),
+                        ListTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: Color(0xFFEDE7F6),
+                            child: Icon(Icons.photo_library_outlined, color: Color(0xFF6A1B9A)),
+                          ),
+                          title: const Text('Choose from Gallery'),
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            await _pickPaymentQrFromSource(ImageSource.gallery);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                width: double.infinity,
+                height: 150,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
+                ),
+                child: _paymentQrImage != null
+                    ? Stack(
+                        alignment: Alignment.topRight,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(_paymentQrImage!, width: double.infinity, height: 150, fit: BoxFit.contain), // Not cropped
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.cancel, color: Colors.red),
+                            onPressed: () => setState(() => _paymentQrImage = null),
+                          ),
+                        ],
+                      )
+                    : const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.qr_code, size: 40, color: Color(0xFF6A1B9A)),
+                          SizedBox(height: 10),
+                          Text("Tap to upload Payment QR", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
               ),
             ),
             const SizedBox(height: 50),
