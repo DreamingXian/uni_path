@@ -52,7 +52,7 @@ class _BuyTicketScreenState extends State<BuyTicketScreen> {
 
       // 2. Create the pending Ticket first — DB auto-generates pass_code as UUID
       final ticket = TicketModel(
-        userId: user.id!,
+        userId: user.id,
         eventId: widget.event.id!,
         status: 'pending',
       );
@@ -60,7 +60,7 @@ class _BuyTicketScreenState extends State<BuyTicketScreen> {
 
       // 3. Create the Payment record referencing the new ticket
       final payment = PaymentModel(
-        userId: user.id!,
+        userId: user.id,
         ticketId: newTicketId,
         amount: widget.event.fees ?? 0.0,
         proofUrl: proofUrl,

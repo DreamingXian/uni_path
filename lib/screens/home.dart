@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
+import '../services/payment_dashboard_service.dart';
 import 'Events/Tickets/student_ticket.dart';
 import 'Events/create_event.dart';
+import 'Events/payment_approval_dashboard.dart';
 import 'auth_screen.dart';
 import 'Events/manage_events.dart';
 import 'Events/events_screen.dart';
@@ -327,6 +329,45 @@ class _HomePageState extends State<HomePage> {
                 }
               },
             ),
+            // --- Payment Approval (society only) ---
+            if (user.role == 'society')
+              FutureBuilder<int>(
+                future: PaymentDashboardService().getPendingPaymentCount(),
+                builder: (context, snapshot) {
+                  final pendingCount = snapshot.data ?? 0;
+                  return ListTile(
+                    leading: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Icon(Icons.receipt_long_outlined, color: Color(0xFF6A1B9A)),
+                        if (pendingCount > 0)
+                          Positioned(
+                            top: -6,
+                            right: -8,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$pendingCount',
+                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    title: const Text('Payment Approval'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentApprovalDashboard()));
+                    },
+                  );
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.bookmark_border, color: Color(0xFF6A1B9A)),
               title: const Text('XXX'),
