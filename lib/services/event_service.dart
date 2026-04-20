@@ -24,6 +24,20 @@ class EventService {
     }
   }
 
+  /// Upload Society Payment QR code to supabase storage and return the public URL
+  Future<String?> uploadPaymentQR(File imageFile) async {
+    try {
+      final fileExtension = imageFile.path.split('.').last;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_qr.$fileExtension';
+      await _supabase.storage.from('event_payment_qr').upload(fileName, imageFile);
+      final publicUrl = _supabase.storage.from('event_payment_qr').getPublicUrl(fileName);
+      return publicUrl;
+    } catch (e) {
+      log('Error uploading payment QR: $e');
+      return null;
+    }
+  }
+
   /// Creates a new event. The 'created_by' is handled by the database default auth.uid().
   Future<int?> insertEvent(EventModel event) async {
     try {
@@ -121,6 +135,7 @@ class EventService {
         'capacity': event.capacity,
         'note': event.note,
         'status': event.status,
+        'payment_qr_url': event.paymentQrUrl,
         // fees is intentionally omitted to restrict overriding later on!
       }).eq('id', event.id!);
       log('Event updated successfully: ${event.id}');

@@ -5,11 +5,17 @@ import '../models/ticket_model.dart';
 class TicketService {
   final _supabase = Supabase.instance.client;
 
-  /// Book a ticket for an event.
-  Future<void> bookTicket(TicketModel ticket) async {
+  /// Book a ticket for an event. Returns the new ticket's ID for linking to a payment.
+  Future<int> bookTicket(TicketModel ticket) async {
     try {
-      await _supabase.from('tickets').insert(ticket.toMap());
-      log('Ticket booked for event: ${ticket.eventId}');
+      final response = await _supabase
+          .from('tickets')
+          .insert(ticket.toMap())
+          .select('id')
+          .single();
+      final newId = response['id'] as int;
+      log('Ticket booked for event: ${ticket.eventId}, ticket ID: $newId');
+      return newId;
     } catch (e) {
       log('Error booking ticket: $e');
       rethrow;
@@ -43,7 +49,7 @@ class TicketService {
     }
   }
 
-  /// The "Scanner" function: Find a ticket by its NFC/QR pass code.
+  /// The "Scanner" function: Find a ticket by its UUID pass code.
   Future<TicketModel?> verifyTicketByCode(String passCode) async {
     try {
       final data = await _supabase
@@ -58,7 +64,7 @@ class TicketService {
     }
   }
 
-  /// Update ticket status (e.g., mark as 'used' after scanning).
+  /// Update ticket status (e.g., mark as 'used' after scanning, or 'active' after payment approval).
   Future<void> updateTicketStatus(int ticketId, String newStatus) async {
     try {
       await _supabase
