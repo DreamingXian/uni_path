@@ -1,7 +1,7 @@
 class PaymentModel {
   final int? id;
   final String userId;
-  final int eventId;
+  final int ticketId; // Changed from eventId — payment references a ticket
   final double amount;
   final String proofUrl;
   final String status;
@@ -12,7 +12,7 @@ class PaymentModel {
   PaymentModel({
     this.id,
     required this.userId,
-    required this.eventId,
+    required this.ticketId,
     required this.amount,
     required this.proofUrl,
     required this.status,
@@ -24,9 +24,9 @@ class PaymentModel {
   factory PaymentModel.fromJson(Map<String, dynamic> json) => PaymentModel(
     id: json['id'],
     userId: json['user_id'],
-    eventId: json['event_id'],
+    ticketId: json['ticket_id'],
     amount: (json['amount'] as num).toDouble(),
-    proofUrl: json['proff_url'], // Map from DB schema strictly
+    proofUrl: json['proff_url'],
     status: json['status'],
     adminNote: json['admin_note'],
     updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
@@ -35,7 +35,7 @@ class PaymentModel {
 
   Map<String, dynamic> toMap() => {
     'user_id': userId,
-    'event_id': eventId,
+    'ticket_id': ticketId,
     'amount': amount,
     'proff_url': proofUrl,
     'status': status,
