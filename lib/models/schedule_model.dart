@@ -9,6 +9,9 @@ class ScheduleModel {
   final DateTime startTime;
   final DateTime endTime;
   final DateTime? createdAt;
+  // New Fields added for filtering and UI labels
+  final String? labelName;
+  final String? labelColor;
 
   ScheduleModel({
     this.id,
@@ -21,6 +24,8 @@ class ScheduleModel {
     required this.startTime,
     required this.endTime,
     this.createdAt,
+    this.labelName,
+    this.labelColor,
   });
 
   factory ScheduleModel.fromJson(Map<String, dynamic> json) => ScheduleModel(
@@ -36,6 +41,8 @@ class ScheduleModel {
     createdAt: json['created_at'] != null
         ? DateTime.parse(json['created_at'])
         : null,
+    labelName: json['label_name'],
+    labelColor: json['label_color'],
   );
 
   Map<String, dynamic> toMap() => {
@@ -46,6 +53,8 @@ class ScheduleModel {
     'longitude': longitude,
     'start_time': startTime.toIso8601String(),
     'end_time': endTime.toIso8601String(),
+    'label_name': labelName,
+    'label_color': labelColor,
     // user_id handled by auth.uid() default in DB
   };
 }

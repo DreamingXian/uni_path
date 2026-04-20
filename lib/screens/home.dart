@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
+import 'Events/Tickets/student_ticket.dart';
+import 'Events/create_event.dart';
 import 'auth_screen.dart';
+import 'Events/manage_events.dart';
 import 'Events/events_screen.dart';
 import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
@@ -23,10 +26,18 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // navigator pages
-  final List<Widget> _pages = [
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  // navigator pages dynamically generated to pass states down
+  List<Widget> get _pages => [
     const CommunityScreen(), // Index 0
-    const EventsScreen(),    // Index 1
+    EventsScreen(searchQuery: _searchController.text), // Index 1 receives live search
     const ScheduleScreen(),  // Index 2
     const ProfileScreen(),   // Index 3
   ];
@@ -81,7 +92,9 @@ class _HomePageState extends State<HomePage> {
             onPressed: () {
               setState(() {
                 _isSearching = !_isSearching;
-                if (!_isSearching) _searchController.clear();
+                if (!_isSearching) {
+                   _searchController.clear();
+                }
               });
             },
           ),
@@ -111,26 +124,21 @@ class _HomePageState extends State<HomePage> {
       // --- 3. CENTER ACTION BUTTON (FloatingActionButton) ---
       // Shifted up to be half-crossed by the bar edge
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Logic based on current page
-          if (_currentIndex == 0) {
-            // Open the Create Post Screen
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-            ).then((value) {
-              // We will add logic here later to refresh the feed if value == true
-            });
-          }
-          if (_currentIndex == 1) print("Adding an Event");
-          if (_currentIndex == 2) print("Setting a Reminder");
-        },
+        onPressed: () => _handleFabAction(context, user),
         backgroundColor: const Color(0xFF6A1B9A),
         shape: const CircleBorder(),
+        // Inside floatingActionButton:
         child: Icon(
-          _currentIndex == 0 ? Icons.add_comment :
-          _currentIndex == 1 ? Icons.add_box :
-          _currentIndex == 2 ? Icons.alarm_add : Icons.home,
+          // Condition 1: If on Events tab AND user is a student, show Ticket icon
+          _currentIndex == 1 && user?.role == 'student'
+              ? Icons.confirmation_number
+              : (_currentIndex == 0
+              ? Icons.add_comment
+              : _currentIndex == 1
+              ? Icons.add_box
+              : _currentIndex == 2
+              ? Icons.alarm_add
+              : Icons.home),
           color: Colors.white,
         ),
       ),
@@ -157,7 +165,83 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+  /// Handles the action button based on the user's role and login status.
+  void _handleFabAction(BuildContext context, dynamic user) {
+    // 1. Check if logged in first (Gatekeeper)
+    if (user == null) {
+      _showLoginPrompt(context);
+      return;
+    }
 
+    // 2. Handle actions based on which tab is active
+    switch (_currentIndex) {
+      case 0: // Community Hub
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+        ).then((value) {
+          // We will add logic here later to refresh the feed if value == true
+        });
+        break;
+
+      case 1: // Events Module
+        if (user.role == 'society') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreateEventScreen()),
+          );
+        } else {
+          // Students or anyone else viewing events
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const StudentTicketScreen()),
+          );
+        }
+        break;
+
+      case 2: // Schedules & Reminders
+        print("Setting a Reminder...");
+        // Future: Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateScheduleScreen()));
+        break;
+
+      case 3: // Profile
+      // For example: Scroll to top or refresh profile data
+        setState(() => _currentIndex = 0); // Return to home/community
+        break;
+    }
+  }
+
+  /// Shows a pop-up requiring the user to log in before proceeding.
+  void _showLoginPrompt(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Login Required"),
+        content: const Text("Please log in to proceed with this action."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6A1B9A),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx); // Close dialog
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
+              );
+            },
+            child: const Text("Login"),
+          ),
+        ],
+      ),
+    );
+  }
   // -------------------------------------------------------
   // DRAWER
   // -------------------------------------------------------
@@ -224,7 +308,54 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // --- Menu Items ---
+          // --- Specific Module Links ---
+          if (isLoggedIn) ...[
+            ListTile(
+              leading: const Icon(Icons.history, color: Color(0xFF6A1B9A)),
+              title: const Text('XXX'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: Icon(user.role == 'society' ? Icons.event_note : Icons.local_activity, color: const Color(0xFF6A1B9A)),
+              title: Text(user.role == 'society' ? 'Manage Events' : 'Manage Tickets'),
+              onTap: () {
+                Navigator.pop(context);
+                if (user.role == 'society') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageEventsScreen()));
+                } else {
+                  // TODO: Manage Tickets Screen
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bookmark_border, color: Color(0xFF6A1B9A)),
+              title: const Text('XXX'),
+              onTap: () => Navigator.pop(context),
+            ),
+          ] else ...[
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF6A1B9A)),
+              title: const Text('Scan QR / NFC'),
+              onTap: () {
+                Navigator.pop(context);
+                // TODO: Implement Scan Functionality
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.more_horiz, color: Color(0xFF6A1B9A)),
+              title: const Text('XXX'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.more_horiz, color: Color(0xFF6A1B9A)),
+              title: const Text('XXX'),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+
+          const Spacer(),
+
+          // --- Bottom General Links ---
           ListTile(
             leading: const Icon(Icons.settings_outlined),
             title: const Text('Settings'),
@@ -235,8 +366,7 @@ class _HomePageState extends State<HomePage> {
             title: const Text('About UniPath'),
             onTap: () => Navigator.pop(context),
           ),
-
-          const Spacer(),
+          
           const Divider(),
 
           // --- Login / Logout button ---
@@ -298,8 +428,12 @@ class _HomePageState extends State<HomePage> {
       // 2. Clear the user from global state
       Provider.of<UserProvider>(context, listen: false).logout();
 
-      // 3. Close the drawer and stay on HomePage (now showing as guest)
-      Navigator.pop(context);
+      // 3. Close the drawer and redirect to Login Page
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
+        (route) => false,
+      );
     }
   }
 
@@ -315,14 +449,4 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Helper for your temporary Nav Buttons
-  Widget _buildNavButton(BuildContext context, String title, IconData icon, Color color, bool showLogin) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(title),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthScreen(showLogin: showLogin))),
-      ),
-    );
-  }
 }
