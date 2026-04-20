@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../../models/event_model.dart';
 import '../../services/event_service.dart';
+import '../../providers/user_provider.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final EventModel event;
@@ -49,6 +51,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = Provider.of<UserProvider>(context).currentUser;
     bool isFree = (widget.event.fees ?? 0.0) == 0.0;
     
     // Formatting schedules
@@ -294,7 +297,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       ),
       
       // --- STICKY BOTTOM BUTTON ---
-      bottomSheet: Container(
+      bottomSheet: currentUser?.role == 'student' ? Container(
         padding: const EdgeInsets.all(20),
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -317,7 +320,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             ),
           ),
         ),
-      ),
+      ) : null,
     );
   }
 }
