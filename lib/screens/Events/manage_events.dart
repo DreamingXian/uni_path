@@ -322,16 +322,37 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
 // ACTUAL EVENT CARD
 // ---------------------------------------------------------------------------
 
-class _EventCard extends StatelessWidget {
+class _EventCard extends StatefulWidget {
   final EventModel event;
   final VoidCallback onRefresh;
 
   const _EventCard({required this.event, required this.onRefresh});
 
   @override
+  State<_EventCard> createState() => _EventCardState();
+}
+
+class _EventCardState extends State<_EventCard> {
+  final EventService _eventService = EventService();
+  int _enrolledCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEnrolledCount();
+  }
+
+  Future<void> _loadEnrolledCount() async {
+    if (widget.event.id == null) return;
+    final count = await _eventService.getEnrolledCount(widget.event.id!);
+    if (mounted) setState(() => _enrolledCount = count);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final event = widget.event;
     // 1. Calculations
-    final currentEnrollment = 0; // Replace with actual metrics eventually
+    final currentEnrollment = _enrolledCount;
     final capacity = event.capacity ?? 0;
     final fraction = capacity > 0 ? (currentEnrollment / capacity).clamp(0.0, 1.0) : 0.0;
     final fees = event.fees ?? 0;
@@ -358,14 +379,15 @@ class _EventCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () async{
+        onTap: () async {
           await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => UpdateEventScreen(event: event),
             ),
           );
-          onRefresh();
+          widget.onRefresh();
+          _loadEnrolledCount(); // Refresh count on return
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -178,17 +178,33 @@ class EventService {
     }
   }
 
-  /// Calculates total enrolled tickets for a specific event
+  /// Calculates tickets occupying capacity for an event.
+  /// Counts all tickets EXCEPT 'rejected' and 'cancelled'.
   Future<int> getTicketCount(int eventId) async {
     try {
       final response = await _supabase
           .from('tickets')
           .select('id')
           .eq('event_id', eventId)
-          .eq('status', 'active');
+          .not('status', 'in', '(rejected,cancelled)');
       return (response as List).length;
     } catch (e) {
       log('Error getting ticket count: $e');
+      return 0;
+    }
+  }
+
+  /// Counts only confirmed attendees (status = 'active' or 'used') for the manage events view.
+  Future<int> getEnrolledCount(int eventId) async {
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('id')
+          .eq('event_id', eventId)
+          .inFilter('status', ['active', 'used']);
+      return (response as List).length;
+    } catch (e) {
+      log('Error getting enrolled count: $e');
       return 0;
     }
   }
