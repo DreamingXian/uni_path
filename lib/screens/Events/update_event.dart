@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/event_service.dart';
 import '../../services/email_service.dart';
 import 'edit_event_form.dart';
+import 'validate_ticket.dart';
 
 class UpdateEventScreen extends StatelessWidget {
   final EventModel event;
@@ -18,11 +19,13 @@ class UpdateEventScreen extends StatelessWidget {
     if (event.eventTimes == null || event.eventTimes!.isEmpty) return event.status;
 
     final now = DateTime.now();
-    DateTime minStart = event.eventTimes!.first.startDateTime;
+    // RULE MODIFICATION: Events become 'Ongoing' 3 hours early for preemptive ticket scanning. Change 'hours: 3' below.
+    DateTime minStart = event.eventTimes!.first.startDateTime.subtract(const Duration(hours: 3));
     DateTime maxEnd = event.eventTimes!.first.endDateTime;
 
     for (var t in event.eventTimes!) {
-      if (t.startDateTime.isBefore(minStart)) minStart = t.startDateTime;
+      final adjustedStart = t.startDateTime.subtract(const Duration(hours: 3));
+      if (adjustedStart.isBefore(minStart)) minStart = adjustedStart;
       if (t.endDateTime.isAfter(maxEnd)) maxEnd = t.endDateTime;
     }
 
@@ -310,7 +313,7 @@ class UpdateEventScreen extends StatelessWidget {
                   ]
                 ],
               )
-            else
+            else ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 15),
@@ -326,6 +329,31 @@ class UpdateEventScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              if (currentStatus == 'ongoing') ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // We push without needing to wait for a return to redraw, since it's just validation
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ValidateTicketScreen(event: event),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
+                    label: const Text('Validate Ticket', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A1B9A),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
             const SizedBox(height: 20),
           ],
         ),
