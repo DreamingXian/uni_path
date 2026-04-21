@@ -22,18 +22,72 @@ class TicketService {
     }
   }
 
-  /// Get all tickets for the currently logged-in student.
+  /// Get all tickets for the currently logged-in student (light, for join-check).
   Future<List<TicketModel>> getMyTickets() async {
     try {
       final response = await _supabase
           .from('tickets')
-          .select('*, events(*)'); // Join with events to show event names in the UI
+          .select('id, user_id, event_id, status, pass_code');
       return (response as List).map((json) => TicketModel.fromJson(json)).toList();
     } catch (e) {
       log('Error fetching my tickets: $e');
       return [];
     }
   }
+
+  /// Checks if the current student already has a non-cancelled ticket for a specific event.
+  /// Returns true if any ticket exists with status other than 'cancelled'.
+  Future<bool> hasActiveTicketForEvent(int eventId) async {
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('id')
+          .eq('event_id', eventId)
+          .not('status', 'in', '(cancelled)');
+      return (response as List).isNotEmpty;
+    } catch (e) {
+      log('Error checking ticket for event: $e');
+      return false;
+    }
+  }
+
+  /// Get all tickets for the student with full event details (for My Tickets screen).
+  Future<List<Map<String, dynamic>>> getMyTicketsWithEvents() async {
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('''
+            id,
+            event_id,
+            status,
+            pass_code,
+            created_at,
+            events (
+              id,
+              title,
+              location_name,
+              fees,
+              event_poster_url,
+              payment_qr_url,
+              latitude,
+              longitude,
+              status,
+              created_by,
+              created_at,
+              note,
+              description,
+              capacity,
+              event_times ( id, event_id, start_date_time, end_date_time )
+            )
+          ''')
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response as List);
+    } catch (e) {
+      log('Error fetching my tickets with events: $e');
+      return [];
+    }
+  }
+
 
   /// For Society Leaders: See who has booked tickets for their event.
   Future<List<TicketModel>> getEventAttendees(int eventId) async {

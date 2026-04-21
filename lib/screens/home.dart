@@ -6,6 +6,7 @@ import '../services/payment_dashboard_service.dart';
 import 'Events/Tickets/student_ticket.dart';
 import 'Events/create_event.dart';
 import 'Events/payment_approval_dashboard.dart';
+import 'Events/my_tickets.dart';
 import 'auth_screen.dart';
 import 'Events/manage_events.dart';
 import 'Events/events_screen.dart';
@@ -325,7 +326,7 @@ class _HomePageState extends State<HomePage> {
                 if (user.role == 'society') {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageEventsScreen()));
                 } else {
-                  // TODO: Manage Tickets Screen
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTicketsScreen()));
                 }
               },
             ),

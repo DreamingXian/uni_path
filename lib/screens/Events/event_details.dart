@@ -40,12 +40,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       if (mounted) setState(() => _isCheckingJoinStatus = false);
       return;
     }
-    
+
     try {
-      final tickets = await TicketService().getMyTickets();
+      final hasTicket = await TicketService().hasActiveTicketForEvent(widget.event.id!);
       if (mounted) {
         setState(() {
-          _hasJoined = tickets.any((t) => t.eventId == widget.event.id);
+          _hasJoined = hasTicket;
           _isCheckingJoinStatus = false;
         });
       }
