@@ -27,20 +27,56 @@ class CommunityService {
 
   /// Fetches all published posts.
   /// Includes author profile and images in a single call using joins.
-  Future<List<Map<String, dynamic>>> getFeedPosts() async {
-    try {
-      // Joining with 'users' to get names/avatars and 'post_images' for the gallery
-      final response = await _supabase
-          .from('posts')
-          .select('*, users!inner(*), post_images(*)')
-          .eq('status', 'published')
-          .order('created_at', ascending: false);
+// --- UPGRADED: Fetch posts with Filtering and Sorting ---
+  Future<List<Map<String, dynamic>>> getFeedPosts({
+    String category = 'All',
+    String timeRange = 'All time',
+    String sortBy = 'Latest',
+  }) async {
+    // 1. Base Query
+    var query = _supabase.from('posts').select('*, users(full_name), post_images(image_url), comments(type)');
 
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      log('Error fetching feed: $e');
-      return [];
+    // 2. Apply Category Filter
+    if (category != 'All') {
+      query = query.eq('category', category);
     }
+
+    // 3. Apply Time Range Filter
+    if (timeRange != 'All time') {
+      final now = DateTime.now();
+      DateTime startDate;
+
+      if (timeRange == 'Today') {
+        startDate = DateTime(now.year, now.month, now.day);
+      } else if (timeRange == 'This week') {
+        startDate = now.subtract(Duration(days: now.weekday - 1));
+      } else { // This month
+        startDate = DateTime(now.year, now.month, 1);
+      }
+      query = query.gte('created_at', startDate.toIso8601String());
+    }
+
+    // Fetch the filtered data
+    final response = await query;
+    List<Map<String, dynamic>> posts = List<Map<String, dynamic>>.from(response);
+
+    // 4. Calculate Counts for Sorting
+    for (var post in posts) {
+      final comments = post['comments'] as List<dynamic>? ?? [];
+      post['likeCount'] = comments.where((c) => c['type'] == 'reaction').length;
+      post['commentCount'] = comments.where((c) => c['type'] == 'text').length;
+    }
+
+    // 5. Apply Sorting Logic
+    if (sortBy == 'Latest') {
+      posts.sort((a, b) => DateTime.parse(b['created_at']).compareTo(DateTime.parse(a['created_at'])));
+    } else if (sortBy == 'Most liked') {
+      posts.sort((a, b) => (b['likeCount'] as int).compareTo(a['likeCount'] as int));
+    } else if (sortBy == 'Most commented') {
+      posts.sort((a, b) => (b['commentCount'] as int).compareTo(a['commentCount'] as int));
+    }
+
+    return posts;
   }
 
   /// Specific fetch for Lost & Found category.
