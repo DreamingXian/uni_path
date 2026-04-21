@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import '../services/community_service.dart';
 import '../models/comment_model.dart';
+import 'auth_dialog.dart';
 
 class LikeButton extends StatefulWidget {
   final int postId; // The button needs to know WHICH post it belongs to
@@ -41,9 +42,7 @@ class _LikeButtonState extends State<LikeButton> {
   Future<void> _toggleLike() async {
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in to like posts!')),
-      );
+      showLoginRequiredDialog(context);
       return;
     }
 
