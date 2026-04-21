@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import '../services/community_service.dart';
 import '../models/comment_model.dart';
+import 'auth_dialog.dart';
 
 class CommentBottomSheet extends StatefulWidget {
   final int postId;
@@ -48,7 +49,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
 
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to comment.')));
+      showLoginRequiredDialog(context);
       return;
     }
 

@@ -6,6 +6,7 @@ import '../../services/community_service.dart';
 import '../../widget/like_button.dart';
 import '../../widget/comment_bottom_sheet.dart';
 import 'edit_post_screen.dart';
+import '../../widget/auth_dialog.dart';
 
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({super.key});
@@ -332,7 +333,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                                 }
                               },
                               itemBuilder: (context) => [
-                                if (isMyPost) const PopupMenuItem(value: 'edit', child: Text('Edit Post')),
+                                if (isMyPost) const PopupMenuItem(value: 'edit', child: Text('Edit')),
                                 if (isMyPost) const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
                               ],
                             ),
@@ -371,7 +372,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
                                 ),
                               ],
                             ),
-                            IconButton(icon: Icon(Icons.bookmark_border, color: Colors.grey.shade600), onPressed: () {}),
+                            IconButton(icon: Icon(Icons.bookmark_border, color: Colors.grey.shade600), onPressed: () {
+                              if (currentUser == null) {
+                                showLoginRequiredDialog(context);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved to bookmarks!')));
+                              }
+                            }),
                           ],
                         ),
                       ],
