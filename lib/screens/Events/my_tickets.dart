@@ -300,6 +300,7 @@ class _TicketCard extends StatelessWidget {
     final bool isUsed = status == 'used';
     final bool isPending = status == 'pending';
     final bool isRejected = status == 'rejected';
+
     final bool showTicketEnabled = isActive || isUsed;
 
     Color statusColor;

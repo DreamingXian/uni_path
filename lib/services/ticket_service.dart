@@ -27,11 +27,27 @@ class TicketService {
     try {
       final response = await _supabase
           .from('tickets')
-          .select('id, event_id, status, pass_code');
+          .select('id, user_id, event_id, status, pass_code');
       return (response as List).map((json) => TicketModel.fromJson(json)).toList();
     } catch (e) {
       log('Error fetching my tickets: $e');
       return [];
+    }
+  }
+
+  /// Checks if the current student already has a non-cancelled ticket for a specific event.
+  /// Returns true if any ticket exists with status other than 'cancelled'.
+  Future<bool> hasActiveTicketForEvent(int eventId) async {
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('id')
+          .eq('event_id', eventId)
+          .not('status', 'in', '(cancelled)');
+      return (response as List).isNotEmpty;
+    } catch (e) {
+      log('Error checking ticket for event: $e');
+      return false;
     }
   }
 
