@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/event_model.dart';
 import '../../models/event_time_model.dart';
+import '../../services/payment_service.dart';
 import '../../services/ticket_service.dart';
+import '../../services/user_service.dart';
 import 'event_details.dart';
 import 'payment_receipt.dart';
+import 'update_payment.dart';
 
 class MyTicketsScreen extends StatefulWidget {
   const MyTicketsScreen({super.key});
@@ -248,14 +251,115 @@ class _FilterChip extends StatelessWidget {
 
 // ─── Ticket Card ─────────────────────────────────────────────────────────────
 
-class _TicketCard extends StatelessWidget {
+class _TicketCard extends StatefulWidget {
   final Map<String, dynamic> ticketData;
   final VoidCallback onRefresh;
 
   const _TicketCard({required this.ticketData, required this.onRefresh});
 
   @override
+  State<_TicketCard> createState() => _TicketCardState();
+}
+
+class _TicketCardState extends State<_TicketCard> {
+  final PaymentService _paymentService = PaymentService();
+  final TicketService _ticketService = TicketService();
+  final UserService _userService = UserService();
+
+  Future<void> _handleCancel(EventModel event, int ticketId) async {
+    String creatorEmail = 'the organizer';
+    try {
+      final creator = await _userService.getUserById(event.createdBy);
+      if (creator != null) creatorEmail = creator.email;
+    } catch (_) {}
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.red),
+          SizedBox(width: 8),
+          Text('Cancel Ticket'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Are you sure you want to cancel this ticket?',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Text(
+                'For refund inquiries or further assistance, please contact the organizer at:\n\n$creatorEmail',
+                style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Go Back')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    try {
+      final payments = await _paymentService.getPaymentsForTicket(ticketId);
+      if (payments.isNotEmpty) {
+        await _paymentService.updatePaymentStatus(payments.first.id!, 'cancelled');
+      }
+      await _ticketService.updateTicketStatus(ticketId, 'cancelled');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ticket cancelled.'), backgroundColor: Colors.grey),
+        );
+        widget.onRefresh();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel: $e')));
+    }
+  }
+
+  Future<void> _handleResubmit(EventModel event, int ticketId) async {
+    try {
+      final payments = await _paymentService.getPaymentsForTicket(ticketId);
+      if (payments.isEmpty || !mounted) return;
+      final result = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UpdatePaymentScreen(
+            event: event,
+            ticketId: ticketId,
+            currentPayment: payments.first,
+          ),
+        ),
+      );
+      if (result == true) widget.onRefresh();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ticketData = widget.ticketData;
     final status = ticketData['status'] as String;
     final eventJson = ticketData['events'] as Map<String, dynamic>?;
 
@@ -432,7 +536,11 @@ class _TicketCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: null, // TODO: Cancel logic
+                          onPressed: () {
+                            final ticketId = ticketData['id'] as int?;
+                            if (ticketId == null) return;
+                            _handleCancel(event, ticketId);
+                          },
                           icon: const Icon(Icons.cancel_outlined, size: 16),
                           label: const Text('Cancel'),
                           style: OutlinedButton.styleFrom(
@@ -446,7 +554,11 @@ class _TicketCard extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: null, // TODO: Resubmit logic
+                          onPressed: () {
+                            final ticketId = ticketData['id'] as int?;
+                            if (ticketId == null) return;
+                            _handleResubmit(event, ticketId);
+                          },
                           icon: const Icon(Icons.upload_file, size: 16, color: Colors.white),
                           label: const Text('Resubmit', style: TextStyle(color: Colors.white)),
                           style: ElevatedButton.styleFrom(

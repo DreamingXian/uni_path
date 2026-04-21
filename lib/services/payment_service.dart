@@ -47,6 +47,23 @@ class PaymentService {
     }
   }
 
+  /// Resubmit: updates an existing payment with a new proof URL and resets status to 'pending'.
+  Future<void> updatePaymentProofAndReopen(int paymentId, String newProofUrl) async {
+    try {
+      await _supabase.from('payments').update({
+        'proff_url': newProofUrl,
+        'status': 'pending',
+        'admin_note': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', paymentId);
+      log('Payment $paymentId resubmitted with new proof.');
+    } catch (e) {
+      log('Error resubmitting payment: $e');
+      rethrow;
+    }
+  }
+
+
   /// Fetches all payments linked to a specific ticket (for Society review)
   Future<List<PaymentModel>> getPaymentsForTicket(int ticketId) async {
     try {
