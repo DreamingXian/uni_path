@@ -1,5 +1,9 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/ndef_record.dart';
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';
 import '../../models/event_model.dart';
 import '../../services/ticket_service.dart';
 
@@ -84,6 +88,162 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $e')));
         setState(() => _isProcessing = false);
       }
+    }
+  }
+
+  Future<void> _writeNfcTicket() async {
+    final availability = await NfcManager.instance.checkAvailability();
+    if (availability != NfcAvailability.enabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('NFC is not supported or enabled on this device.')));
+      }
+      return;
+    }
+
+    final passCode = widget.ticketData['pass_code'] as String? ?? '';
+    if (passCode.isEmpty) return;
+
+    if (mounted) {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          bool isDetected = false;
+          bool isWriting = false;
+          NfcTag? detectedTag;
+          StateSetter? dialogSetState;
+
+          // Start scanning when dialog opens
+          NfcManager.instance.startSession(
+            pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
+            onDiscovered: (NfcTag tag) async {
+            if (dialogSetState != null) {
+              dialogSetState!(() {
+                detectedTag = tag;
+              });
+            }
+          });
+
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              dialogSetState = setDialogState;
+              
+              // We check if detectedTag shifted
+              if (detectedTag != null && !isDetected) {
+                isDetected = true;
+              }
+
+              return Dialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isDetected ? Icons.nfc : Icons.contactless_outlined,
+                        size: 64,
+                        color: isDetected ? Colors.green : const Color(0xFF6A1B9A),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        isDetected ? 'NFC Detected' : 'NFC',
+                        style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: isDetected ? Colors.green : Colors.black87),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        isDetected
+                            ? 'Sure to write ticket key code on the NFC tag?\n(Keep tag against phone)'
+                            : 'Approach an NFC tag with your device.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey, fontSize: 15),
+                      ),
+                      const SizedBox(height: 32),
+                      if (!isDetected)
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.grey.shade600,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        )
+                      else if (isWriting)
+                        const Center(child: CircularProgressIndicator(color: Colors.green))
+                      else
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.grey.shade700,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                onPressed: () async {
+                                  setDialogState(() => isWriting = true);
+                                  try {
+                                    Ndef? ndef = Ndef.from(detectedTag!);
+                                    if (ndef == null || !ndef.isWritable) {
+                                      throw Exception('Tag is not NDEF writable');
+                                    }
+                                    // Build NDEF Media record (Custom MIME Type)
+                                    // This prevents the OS from triggering default text handlers like TnG app
+                                    final typeBytes = Uint8List.fromList('application/vnd.unipath.ticket'.codeUnits);
+                                    final payloadBytes = Uint8List.fromList(passCode.codeUnits);
+                                    
+                                    final record = NdefRecord(
+                                      typeNameFormat: TypeNameFormat.media,
+                                      type: typeBytes,
+                                      identifier: Uint8List(0),
+                                      payload: payloadBytes,
+                                    );
+                                    final message = NdefMessage(records: [record]);
+                                    await ndef.write(message: message);
+                                    
+                                    if (ctx.mounted) {
+                                      Navigator.pop(ctx);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Ticket successfully written to NFC tag!')));
+                                    }
+                                  } catch (e) {
+                                    if (ctx.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Failed to write: $e (Did you move the tag?)')));
+                                      setDialogState(() => isWriting = false);
+                                    }
+                                  }
+                                },
+                                child: const Text('Write', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ).then((_) {
+        // ALWAYS stop session when dialog is dismissed
+        NfcManager.instance.stopSession();
+      });
     }
   }
 
@@ -316,6 +476,22 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                  ),
                ),
             ],
+            const SizedBox(height: 16),
+            // Optional Write NFC Ticket button globally
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.nfc),
+                label: const Text('WRITE NFC TICKET', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF6A1B9A),
+                  side: const BorderSide(color: Color(0xFF6A1B9A), width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _writeNfcTicket,
+              ),
+            ),
             const SizedBox(height: 20),
           ],
         ),

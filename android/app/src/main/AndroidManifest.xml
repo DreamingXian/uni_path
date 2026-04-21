@@ -7,6 +7,8 @@
     <!-- Camera & storage: needed for image_picker -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- NFC: needed for hardware NFC polling -->
+    <uses-permission android:name="android.permission.NFC"/>
     <application
         android:label="uni_path"
         android:name="${applicationName}"

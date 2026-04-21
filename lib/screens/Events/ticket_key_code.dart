@@ -21,8 +21,6 @@ class TicketKeyCodeScreen extends StatefulWidget {
 }
 
 class _TicketKeyCodeScreenState extends State<TicketKeyCodeScreen> {
-  String _selectedTab = 'QR Code';
-
   @override
   Widget build(BuildContext context) {
     // Extract passcode prefix before "-"
@@ -181,52 +179,33 @@ class _TicketKeyCodeScreenState extends State<TicketKeyCodeScreen> {
                             width: double.infinity,
                             child: Column(
                               children: [
-                                if (_selectedTab == 'QR Code') ...[
-                                  // QR Code
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.grey.shade200),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.05),
-                                          blurRadius: 10,
-                                        ),
-                                      ],
-                                    ),
-                                    child: QrImageView(
-                                      data: widget.passCode,
-                                      version: QrVersions.auto,
-                                      size: 200.0,
-                                    ),
+                                // QR Code
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.grey.shade200),
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10),
+                                    ],
                                   ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    codeDisplay.toUpperCase(),
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 2,
-                                      color: Color(0xFF1A237E),
-                                    ),
+                                  child: QrImageView(
+                                    data: widget.passCode,
+                                    version: QrVersions.auto,
+                                    size: 200.0,
                                   ),
-                                ] else ...[
-                                  Container(
-                                    height: 250,
-                                    alignment: Alignment.center,
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.nfc, size: 80, color: Colors.grey.shade300),
-                                        const SizedBox(height: 16),
-                                        const Text('NFC Scanning', style: TextStyle(color: Colors.grey, fontSize: 18, fontWeight: FontWeight.bold)),
-                                        const Text('(Coming Soon)', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                                      ],
-                                    ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  codeDisplay.toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 2,
+                                    color: Color(0xFF1A237E),
                                   ),
-                                ],
+                                ),
                                 const SizedBox(height: 32),
                                 const Divider(),
                                 const SizedBox(height: 24),
@@ -254,61 +233,6 @@ class _TicketKeyCodeScreenState extends State<TicketKeyCodeScreen> {
                     ),
                   ),
                 ),
-              ),
-            ),
-            // ── Bottom Tab row ────────────────────────────────────────
-            Container(
-              margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedTab = 'QR Code'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        decoration: BoxDecoration(
-                          color: _selectedTab == 'QR Code' ? const Color(0xFF6A1B9A) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'QR Code',
-                          style: TextStyle(
-                            color: _selectedTab == 'QR Code' ? Colors.white : Colors.white70,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedTab = 'NFC'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        decoration: BoxDecoration(
-                          color: _selectedTab == 'NFC' ? const Color(0xFF6A1B9A) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'NFC',
-                          style: TextStyle(
-                            color: _selectedTab == 'NFC' ? Colors.white : Colors.white70,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
           ],

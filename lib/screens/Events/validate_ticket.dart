@@ -1,5 +1,9 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/ndef_record.dart';
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';
 import '../../models/event_model.dart';
 import '../../services/ticket_service.dart';
 import 'ticket_details.dart';
@@ -24,11 +28,22 @@ class _ValidateTicketScreenState extends State<ValidateTicketScreen> {
   bool _isLoading = true;
   bool _isProcessing = false; // prevents multiple rapid triggers
   String _selectedTab = 'Scan QR';
+  bool _nfcSupported = true;
 
   @override
   void initState() {
     super.initState();
     _loadTickets();
+    _checkNfcSupport();
+  }
+
+  Future<void> _checkNfcSupport() async {
+    final availability = await NfcManager.instance.checkAvailability();
+    if (mounted) {
+      setState(() {
+        _nfcSupported = availability == NfcAvailability.enabled;
+      });
+    }
   }
 
   Future<void> _loadTickets() async {
@@ -44,7 +59,74 @@ class _ValidateTicketScreenState extends State<ValidateTicketScreen> {
   @override
   void dispose() {
     _scannerController.dispose();
+    _stopNfcSession();
     super.dispose();
+  }
+
+  void _startNfcSession() {
+    if (!_nfcSupported) return;
+    NfcManager.instance.startSession(
+      pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
+      onDiscovered: (NfcTag tag) async {
+      
+      if (_isProcessing) return;
+      _isProcessing = true;
+      
+      // Stop scanning before pushing new routes or dialogs
+      await NfcManager.instance.stopSession();
+
+      Ndef? ndef = Ndef.from(tag);
+      if (ndef == null || ndef.cachedMessage == null) {
+        _showInvalidDialog();
+        return;
+      }
+      
+      String code = '';
+      for (var record in ndef.cachedMessage!.records) {
+        if (record.typeNameFormat == TypeNameFormat.media) {
+           final typeStr = String.fromCharCodes(record.type);
+           if (typeStr == 'application/vnd.unipath.ticket') {
+              final payload = record.payload;
+              if (payload.isNotEmpty) {
+                 code = String.fromCharCodes(payload);
+                 break;
+              }
+           }
+        } else if (record.typeNameFormat == TypeNameFormat.wellKnown) {
+          final payload = record.payload;
+          if (payload.isNotEmpty) {
+             // NDEF Text Record: 1st byte is status (bit 5-0 is lang code length)
+             int langCodeLen = payload[0] & 0x3F;
+             if (payload.length > 1 + langCodeLen) {
+                code = String.fromCharCodes(payload.sublist(1 + langCodeLen));
+                break;
+             }
+          }
+        }
+      }
+
+      if (code.isEmpty) {
+        _showInvalidDialog();
+        return;
+      }
+
+      final matchedTicket = _tickets.firstWhere(
+        (t) => (t['pass_code'] as String?) == code,
+        orElse: () => <String, dynamic>{}, 
+      );
+
+      if (matchedTicket.isNotEmpty) {
+        _navigateToDetails(matchedTicket);
+      } else {
+        _showInvalidDialog();
+      }
+    });
+  }
+
+  void _stopNfcSession() {
+    if (_nfcSupported) {
+      NfcManager.instance.stopSession();
+    }
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -81,7 +163,16 @@ class _ValidateTicketScreenState extends State<ValidateTicketScreen> {
 
     // After returning from details, reload tickets to get freshest statuses and resume scanning
     await _loadTickets();
-    _isProcessing = false;
+    
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+      });
+      // Restart the NFC poller if we're still on the NFC tab!
+      if (_selectedTab == 'Scan NFC') {
+        _startNfcSession();
+      }
+    }
   }
 
   Future<void> _showInvalidDialog() async {
@@ -143,7 +234,15 @@ class _ValidateTicketScreenState extends State<ValidateTicketScreen> {
     );
 
     // Resume scanning after dismissing dialog
-    _isProcessing = false;
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+      });
+      // Restart the NFC poller if we're still on the NFC tab!
+      if (_selectedTab == 'Scan NFC') {
+        _startNfcSession();
+      }
+    }
   }
 
   @override
@@ -208,6 +307,7 @@ class _ValidateTicketScreenState extends State<ValidateTicketScreen> {
                         child: GestureDetector(
                           onTap: () {
                             setState(() => _selectedTab = 'Scan QR');
+                            _stopNfcSession();
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -231,6 +331,7 @@ class _ValidateTicketScreenState extends State<ValidateTicketScreen> {
                         child: GestureDetector(
                           onTap: () {
                             setState(() => _selectedTab = 'Scan NFC');
+                            _startNfcSession();
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -266,16 +367,30 @@ class _ValidateTicketScreenState extends State<ValidateTicketScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.nfc, size: 80, color: Colors.grey.shade600),
-            const SizedBox(height: 16),
-            const Text(
-              'NFC Scanning',
-              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            Icon(
+              _nfcSupported ? Icons.nfc : Icons.cancel, 
+              size: 80, 
+              color: _nfcSupported ? Colors.grey.shade600 : Colors.red,
             ),
-            const SizedBox(height: 8),
-            const Text(
-              '(Coming Soon)',
-              style: TextStyle(color: Colors.white54, fontSize: 16),
+            const SizedBox(height: 16),
+            Text(
+              _nfcSupported ? 'NFC Scanning' : 'NFC Unsupported',
+              style: TextStyle(
+                color: _nfcSupported ? Colors.white : Colors.red, 
+                fontSize: 20, 
+                fontWeight: FontWeight.bold
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _nfcSupported 
+                  ? '(Preparing to scan NFC)'
+                  : 'This device is not applicable with NFC functionality.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _nfcSupported ? Colors.white54 : Colors.red.shade300, 
+                fontSize: 16
+              ),
             ),
           ],
         ),
