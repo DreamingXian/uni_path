@@ -45,8 +45,10 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
   LatLng? _pinnedLocation;
   String? _pinnedAddress;
 
-  // --- Poster image state ---
+  // --- Poster & QR image state ---
   File? _posterImage;
+  File? _paymentQrImage;
+  String? _existingPaymentQrUrl;
   final ImagePicker _picker = ImagePicker();
   final EventService _eventService = EventService();
 
@@ -61,6 +63,7 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
     _noteController.text = widget.event.note ?? '';
     _feeController.text = widget.event.fees?.toString() ?? '';
     if (widget.event.fees == null || widget.event.fees == 0) _isFree = true;
+    _existingPaymentQrUrl = widget.event.paymentQrUrl;
     
     if (widget.event.latitude != null && widget.event.longitude != null) {
       _pinnedLocation = LatLng(widget.event.latitude!, widget.event.longitude!);
@@ -225,6 +228,16 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
     }
   }
 
+  Future<void> _pickPaymentQrFromSource(ImageSource source) async {
+    final XFile? picked = await _picker.pickImage(
+      source: source,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      setState(() => _paymentQrImage = File(picked.path));
+    }
+  }
+
   // Dialog shown when user taps an already-set poster
   Future<_PosterAction?> _showChangeImageDialog() async {
     return await showDialog<_PosterAction>(
@@ -262,6 +275,11 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event title is required.')));
+      return;
+    }
+
+    if (_paymentQrImage == null && _existingPaymentQrUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment QR Code is required for all events.')));
       return;
     }
 
@@ -335,6 +353,11 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
         posterUrl = await _eventService.uploadPoster(_posterImage!);
       }
 
+      String? paymentQrUrl = _existingPaymentQrUrl;
+      if (_paymentQrImage != null) {
+        paymentQrUrl = await _eventService.uploadPaymentQR(_paymentQrImage!);
+      }
+
       final capacityVal = int.tryParse(_capacityController.text.trim());
 
       final event = EventModel(
@@ -350,6 +373,7 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
         capacity: capacityVal,
         eventPosterUrl: posterUrl,
         note: _noteController.text.trim(),
+        paymentQrUrl: paymentQrUrl,
         createdAt: widget.event.createdAt,
       );
 
@@ -941,6 +965,96 @@ class _EditEventFormScreenState extends State<EditEventFormScreen> {
                   padding: EdgeInsets.only(bottom: 35), // Align icon with top of hint text
                   child: Icon(Icons.note_alt_outlined, color: Color(0xFF6A1B9A)),
                 ),
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            // 10. PAYMENT QR UPLOAD
+            const Text("Payment QR Code", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            GestureDetector(
+              onTap: () async {
+                FocusScope.of(context).unfocus();
+                
+                // If they already have an existing code mapped:
+                if (_paymentQrImage != null || _existingPaymentQrUrl != null) {
+                   final action = await _showChangeImageDialog();
+                   if (action == _PosterAction.remove) {
+                     setState(() {
+                       _paymentQrImage = null;
+                       _existingPaymentQrUrl = null;
+                     });
+                   } else if (action == _PosterAction.change) {
+                     showModalBottomSheet(
+                       context: context,
+                       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                       builder: (ctx) => SafeArea(
+                         child: Column(
+                           mainAxisSize: MainAxisSize.min,
+                           children: [
+                             ListTile(
+                               leading: const Icon(Icons.photo_library_outlined),
+                               title: const Text('Gallery'),
+                               onTap: () async {
+                                 Navigator.pop(ctx);
+                                 await _pickPaymentQrFromSource(ImageSource.gallery);
+                               },
+                             ),
+                           ],
+                         ),
+                       ),
+                     );
+                   }
+                   return; // End flow
+                }
+
+                // If blank:
+                showModalBottomSheet(
+                  context: context,
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                  builder: (ctx) => SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.photo_library_outlined),
+                          title: const Text('Gallery'),
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            await _pickPaymentQrFromSource(ImageSource.gallery);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                width: double.infinity,
+                height: 150,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
+                ),
+                child: (_paymentQrImage != null)
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(_paymentQrImage!, width: double.infinity, height: 150, fit: BoxFit.contain), 
+                      )
+                    : (_existingPaymentQrUrl != null)
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(_existingPaymentQrUrl!, width: double.infinity, height: 150, fit: BoxFit.contain),
+                          )
+                        : const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.qr_code, size: 40, color: Color(0xFF6A1B9A)),
+                              SizedBox(height: 10),
+                              Text("Tap to upload Payment QR", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
               ),
             ),
             const SizedBox(height: 50),

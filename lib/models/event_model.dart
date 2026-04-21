@@ -14,6 +14,7 @@ class EventModel {
   final int? capacity;
   final String? eventPosterUrl;
   final String? note;
+  final String? paymentQrUrl;
   final DateTime createdAt;
   
   // Embedded Relational Data
@@ -23,7 +24,7 @@ class EventModel {
   EventModel({
     this.id, required this.title, this.description, this.locationName,
     this.latitude, this.longitude, required this.status, required this.createdBy,
-    this.fees, this.capacity, this.eventPosterUrl, this.note,
+    this.fees, this.capacity, this.eventPosterUrl, this.note, this.paymentQrUrl,
     this.eventTimes, this.tags, required this.createdAt,
   });
 
@@ -51,6 +52,7 @@ class EventModel {
       capacity: json['capacity'],
       eventPosterUrl: json['event_poster_url'],
       note: json['note'],
+      paymentQrUrl: json['payment_qr_url'],
       eventTimes: parsedTimes,
       tags: parsedTags,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
@@ -68,5 +70,6 @@ class EventModel {
     'capacity': capacity,
     'event_poster_url': eventPosterUrl,
     'note': note,
+    'payment_qr_url': paymentQrUrl,
   };
 }
