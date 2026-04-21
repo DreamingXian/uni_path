@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/event_model.dart';
 import '../../models/event_time_model.dart';
+import '../../models/payment_model.dart';
 import '../../services/payment_service.dart';
 import '../../services/ticket_service.dart';
 import '../../services/user_service.dart';
 import 'event_details.dart';
 import 'payment_receipt.dart';
 import 'update_payment.dart';
+import 'ticket_key_code.dart';
 
 class MyTicketsScreen extends StatefulWidget {
   const MyTicketsScreen({super.key});
@@ -574,7 +576,21 @@ class _TicketCardState extends State<_TicketCard> {
                 : SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: showTicketEnabled ? null : null, // TODO: Show ticket logic
+                      onPressed: showTicketEnabled ? () {
+                         final passCode = ticketData['pass_code'] as String?;
+                         if (passCode == null) return;
+                         
+                         Navigator.push(
+                           context,
+                           MaterialPageRoute(
+                             builder: (_) => TicketKeyCodeScreen(
+                               event: event,
+                               passCode: passCode,
+                               formattedSchedules: formattedSchedules,
+                             ),
+                           ),
+                         );
+                      } : null,
                       icon: Icon(
                         Icons.qr_code_2,
                         size: 18,

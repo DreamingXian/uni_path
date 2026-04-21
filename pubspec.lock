@@ -2,7 +2,7 @@
 # See https://dart.dev/tools/pub/glossary#lockfile
 packages:
   app_links:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: app_links
       sha256: "3462d9defc61565fde4944858b59bec5be2b9d5b05f20aed190adb3ad08a7abc"
@@ -632,6 +632,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.0"
+  mobile_scanner:
+    dependency: "direct main"
+    description:
+      name: mobile_scanner
+      sha256: c92c26bf2231695b6d3477c8dcf435f51e28f87b1745966b1fe4c47a286171ce
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.2.0"
   native_toolchain_c:
     dependency: transitive
     description:
@@ -640,6 +648,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.17.6"
+  ndef_record:
+    dependency: transitive
+    description:
+      name: ndef_record
+      sha256: "210ffb12284961cab9e44b99462143316d9a20cd992581170706069ef77d74a6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.2"
   nested:
     dependency: transitive
     description:
@@ -648,6 +664,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.0"
+  nfc_manager:
+    dependency: "direct main"
+    description:
+      name: nfc_manager
+      sha256: "1b8d3788ed71bb34f59878a445e433891eb2268353289515c1542b2780151fe6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.2.1"
+  nfc_manager_ndef:
+    dependency: "direct main"
+    description:
+      name: nfc_manager_ndef
+      sha256: "8aacee776120b4d09e3049b26cf4a7397fee3abafc207c0640342ada05c5df7d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.0"
   objective_c:
     dependency: transitive
     description:
@@ -816,6 +848,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.2"
+  qr:
+    dependency: transitive
+    description:
+      name: qr
+      sha256: "5a1d2586170e172b8a8c8470bbbffd5eb0cd38a66c0d77155ea138d3af3a4445"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.2"
+  qr_flutter:
+    dependency: "direct main"
+    description:
+      name: qr_flutter
+      sha256: "5095f0fc6e3f71d08adef8feccc8cea4f12eec18a2e31c2e8d82cb6019f4b097"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.0"
   realtime_client:
     dependency: transitive
     description:

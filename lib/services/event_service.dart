@@ -72,7 +72,11 @@ class EventService {
   /// Fetch a single event by its ID.
   Future<EventModel?> getEventById(int id) async {
     try {
-      final data = await _supabase.from('events').select().eq('id', id).single();
+      final data = await _supabase
+          .from('events')
+          .select('*, event_times(*), event_tags(tags(*))')
+          .eq('id', id)
+          .single();
       return EventModel.fromJson(data);
     } catch (e) {
       log('Error fetching event $id: $e');

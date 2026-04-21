@@ -48,6 +48,11 @@ dependencies:
   http: ^1.2.2
   url_launcher: ^6.3.2
   mailer: ^7.1.0
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.2.0
+  nfc_manager: ^4.2.1
+  nfc_manager_ndef: ^1.1.0
+  app_links: ^7.0.0
 
 dev_dependencies:
   flutter_test:

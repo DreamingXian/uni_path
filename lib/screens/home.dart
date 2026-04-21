@@ -3,13 +3,13 @@ import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
 import '../services/payment_dashboard_service.dart';
-import 'Events/Tickets/student_ticket.dart';
 import 'Events/create_event.dart';
 import 'Events/payment_approval_dashboard.dart';
 import 'Events/my_tickets.dart';
 import 'auth_screen.dart';
 import 'Events/manage_events.dart';
 import 'Events/events_screen.dart';
+import 'Events/scan_qr_nfc.dart';
 import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
 import 'Profiles/profile_screen.dart';
@@ -197,7 +197,7 @@ class _HomePageState extends State<HomePage> {
           // Students or anyone else viewing events
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const StudentTicketScreen()),
+            MaterialPageRoute(builder: (_) => const MyTicketsScreen())
           );
         }
         break;
@@ -314,6 +314,14 @@ class _HomePageState extends State<HomePage> {
           // --- Specific Module Links ---
           if (isLoggedIn) ...[
             ListTile(
+              leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF6A1B9A)),
+              title: const Text('Scan QR / NFC'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanQRNFCScreen()));
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.history, color: Color(0xFF6A1B9A)),
               title: const Text('XXX'),
               onTap: () => Navigator.pop(context),
@@ -380,7 +388,7 @@ class _HomePageState extends State<HomePage> {
               title: const Text('Scan QR / NFC'),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement Scan Functionality
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanQRNFCScreen()));
               },
             ),
             ListTile(
