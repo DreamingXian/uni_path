@@ -32,16 +32,23 @@ class CommunityService {
     String category = 'All',
     String timeRange = 'All time',
     String sortBy = 'Latest',
+    String searchQuery = '',
   }) async {
     // 1. Base Query
     var query = _supabase.from('posts').select('*, users(full_name), post_images(image_url), comments(type)');
 
-    // 2. Apply Category Filter
+    // 2. Apply Search Filter (Case-insensitive matching for title) ---
+    if (searchQuery.isNotEmpty) {
+      // The % symbols mean the letter can be anywhere in the title
+      query = query.ilike('title', '%$searchQuery%');
+    }
+
+    // 3. Apply Category Filter
     if (category != 'All') {
       query = query.eq('category', category);
     }
 
-    // 3. Apply Time Range Filter
+    // 4. Apply Time Range Filter
     if (timeRange != 'All time') {
       final now = DateTime.now();
       DateTime startDate;

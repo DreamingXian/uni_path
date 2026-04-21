@@ -21,6 +21,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _posts = [];
 
+  // --- NEW: Search Controller ---
+  final TextEditingController _searchController = TextEditingController();
+
   // --- NEW: Filter & Sort State Variables ---
   String _selectedCategory = 'All';
   String _selectedTimeRange = 'All time';
@@ -38,12 +41,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
   // --- UPGRADED: Load posts with active filters ---
   Future<void> _loadPosts() async {
-    setState(() => _isLoading = true);
+    if (_posts.isEmpty) setState(() => _isLoading = true);
     try {
       final posts = await _communityService.getFeedPosts(
         category: _selectedCategory,
         timeRange: _selectedTimeRange,
         sortBy: _selectedSort,
+        searchQuery: _searchController.text.trim(),
       );
       if (mounted) {
         setState(() {
@@ -233,6 +237,38 @@ class _CommunityScreenState extends State<CommunityScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // --- NEW: Real-time Search Bar ---
+              TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() {}); // Refreshes UI so the 'Clear' X button appears
+                  _loadPosts();    // Instantly searches the database!
+                },
+                decoration: InputDecoration(
+                  hintText: "Search posts by title...",
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  // Show a clear button only if they have typed something
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                    icon: const Icon(Icons.clear, color: Colors.grey),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {});
+                      _loadPosts(); // Reload full feed when cleared
+                    },
+                  )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
               Row(
                 children: [
                   Expanded(
