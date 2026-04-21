@@ -4,6 +4,7 @@ import '../../models/event_model.dart';
 import '../../models/event_time_model.dart';
 import '../../services/ticket_service.dart';
 import 'event_details.dart';
+import 'payment_receipt.dart';
 
 class MyTicketsScreen extends StatefulWidget {
   const MyTicketsScreen({super.key});
@@ -486,7 +487,19 @@ class _TicketCard extends StatelessWidget {
 
           // ── Receipt button (full-width, bottom) ────────────────────────
           InkWell(
-            onTap: null, // TODO: Push payment_receipt.dart
+            onTap: () {
+            final ticketId = ticketData['id'] as int?;
+            if (ticketId == null) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PaymentReceiptScreen(
+                  ticketId: ticketId,
+                  eventTitle: event.title,
+                ),
+              ),
+            );
+          },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 11),
