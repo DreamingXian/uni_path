@@ -7,6 +7,8 @@ import 'package:uni_path/providers/user_provider.dart';
 import 'package:uni_path/screens/home.dart';
 import 'package:uni_path/screens/Events/event_details.dart';
 import 'package:uni_path/services/event_service.dart';
+import 'package:uni_path/services/user_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
@@ -49,6 +51,44 @@ class _MainAppState extends State<MainApp> {
   void initState() {
     super.initState();
     _initDeepLinks();
+    _initializeSession();
+  }
+
+  Future<void> _initializeSession() async {
+    // Check local preferences to see if they specifically un-checked "Remember Me"
+    final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool('remember_me') ?? true; // default to true if never explicitly set
+
+    if (!rememberMe) {
+      // They didn't want to be remembered across app boots. Wipe the cached Supabase token.
+      await Supabase.instance.client.auth.signOut();
+    } else {
+      // 1. Check for immediate session on boot
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        _loadUser(session.user.id);
+      }
+    }
+
+    // 2. Listen globally for token refreshes or logouts
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final session = data.session;
+      if (session != null) {
+        _loadUser(session.user.id);
+      } else {
+        if (mounted) {
+          Provider.of<UserProvider>(context, listen: false).logout();
+        }
+      }
+    });
+  }
+
+  Future<void> _loadUser(String userId) async {
+    final userService = UserService();
+    final user = await userService.getUserById(userId);
+    if (user != null && mounted) {
+      Provider.of<UserProvider>(context, listen: false).setUser(user);
+    }
   }
 
   void _initDeepLinks() {
