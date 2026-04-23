@@ -104,25 +104,8 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
 
-      // --- 2. BODY (Your Temporary Menu) ---
+      // --- 2. BODY  ---
       body: _pages[_currentIndex],
-      /*body: ListView(
-        controller: _scrollController, // Linked to the "Back to Top" logic
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          Text('Welcome, ${user?.fullName ?? "Guest Student"}!',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          const Text('This hub is a temporary navigation for development.'),
-          const Divider(height: 40),
-
-          _buildNavButton(context, 'Go to Sign Up', Icons.person_add, Colors.green, false),
-          _buildNavButton(context, 'Go to Login', Icons.login, Colors.blue, true),
-
-          // Add enough space to test scrolling
-          const SizedBox(height: 800, child: Center(child: Text("Scroll down to test 'Back to Top'"))),
-        ],
-      ),*/
 
       // --- 3. CENTER ACTION BUTTON (FloatingActionButton) ---
       // Shifted up to be half-crossed by the bar edge
