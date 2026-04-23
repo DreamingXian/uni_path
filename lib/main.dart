@@ -10,21 +10,27 @@ import 'package:uni_path/services/event_service.dart';
 import 'package:uni_path/services/user_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:uni_path/services/notification_service.dart';
+import 'package:uni_path/services/schedule_service.dart';
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 
-// new line added by shouxian
-//xindongxi
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables from the bundled .env asset
+  // Load environment variables
   await dotenv.load(fileName: '.env');
 
+  // Initialize Supabase
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
+  // --- MODULE 4 INITIALIZATION ---
+  // Initialize notifications (Timezones, Channels, and Permissions)
+  final notificationService = NotificationService();
+  await notificationService.init();
 
   runApp(
     MultiProvider(
@@ -55,22 +61,22 @@ class _MainAppState extends State<MainApp> {
   }
 
   Future<void> _initializeSession() async {
-    // Check local preferences to see if they specifically un-checked "Remember Me"
     final prefs = await SharedPreferences.getInstance();
-    final rememberMe = prefs.getBool('remember_me') ?? true; // default to true if never explicitly set
+    final rememberMe = prefs.getBool('remember_me') ?? true;
 
     if (!rememberMe) {
-      // They didn't want to be remembered across app boots. Wipe the cached Supabase token.
       await Supabase.instance.client.auth.signOut();
     } else {
-      // 1. Check for immediate session on boot
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         _loadUser(session.user.id);
+
+        // --- MODULE 4: BACKGROUND SYNC ---
+        // Sync local SQLite database with fresh data on app boot
+        ScheduleService().getMySchedules();
       }
     }
 
-    // 2. Listen globally for token refreshes or logouts
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final session = data.session;
       if (session != null) {
@@ -93,20 +99,15 @@ class _MainAppState extends State<MainApp> {
 
   void _initDeepLinks() {
     _appLinks = AppLinks();
-    
-    // Handle initial routing if app launched cold from a link
     _appLinks.getInitialLink().then((uri) {
       if (uri != null) _handleIncomingURI(uri);
     });
-
-    // Handle deep links when app is already in the background/foreground
     _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
       _handleIncomingURI(uri);
     });
   }
 
   Future<void> _handleIncomingURI(Uri uri) async {
-    // Expected link: https://unipath.com/event/<eventId>
     if (uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'event') {
       if (uri.pathSegments.length > 1) {
         final eventIdStr = uri.pathSegments[1];
@@ -144,7 +145,7 @@ class _MainAppState extends State<MainApp> {
       title: 'UniPath',
       theme: ThemeData(
         useMaterial3: true,
-        primarySwatch: Colors.purple,
+        colorSchemeSeed: Colors.purple, // Using seeds is cleaner in Material 3
       ),
       home: const HomePage(),
     );

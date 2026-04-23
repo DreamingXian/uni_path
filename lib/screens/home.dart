@@ -12,6 +12,7 @@ import 'Events/events_screen.dart';
 import 'Events/scan_qr_nfc.dart';
 import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
+import 'Schedules/create_schedule_screen.dart'; // [MEMBER 3 ADDITION]
 import 'Profiles/profile_screen.dart';
 import 'Posts/create_post_screen.dart';
 
@@ -97,7 +98,7 @@ class _HomePageState extends State<HomePage> {
                 setState(() {
                   _isSearching = !_isSearching;
                   if (!_isSearching) {
-                     _searchController.clear();
+                    _searchController.clear();
                   }
                 });
               },
@@ -180,15 +181,17 @@ class _HomePageState extends State<HomePage> {
         } else {
           // Students or anyone else viewing events
           Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const MyTicketsScreen())
+              context,
+              MaterialPageRoute(builder: (_) => const MyTicketsScreen())
           );
         }
         break;
 
-      case 2: // Schedules & Reminders
-        print("Setting a Reminder...");
-        // Future: Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateScheduleScreen()));
+      case 2: // [MEMBER 3 ADDITION: SCHEDULES & REMINDERS]
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CreateScheduleScreen()),
+        );
         break;
 
       case 3: // Profile
@@ -400,7 +403,7 @@ class _HomePageState extends State<HomePage> {
             title: const Text('About UniPath'),
             onTap: () => Navigator.pop(context),
           ),
-          
+
           const Divider(),
 
           // --- Login / Logout button ---
@@ -466,7 +469,7 @@ class _HomePageState extends State<HomePage> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
-        (route) => false,
+            (route) => false,
       );
     }
   }
