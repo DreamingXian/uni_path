@@ -336,4 +336,82 @@ class CommunityService {
     }
   }
 
+  // --- SAVED POSTS OPERATIONS ---
+
+  /// 1. Fetches just the IDs of saved posts for quick UI rendering (Performance Optimization)
+  Future<Set<int>> getSavedPostIds() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return {};
+
+    try {
+      final response = await _supabase
+          .from('saved_posts')
+          .select('post_id')
+          .eq('user_id', user.id);
+
+      return (response as List).map((e) => e['post_id'] as int).toSet();
+    } catch (e) {
+      log('Error fetching saved post IDs: $e');
+      return {};
+    }
+  }
+
+  /// 2. Toggle Logic with Auth Check built-in
+  Future<bool> toggleSavedPost(int postId, bool currentlySaved) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception("Login required");
+
+    try {
+      if (currentlySaved) {
+        // Unsave
+        await _supabase.from('saved_posts').delete().match({'user_id': user.id, 'post_id': postId});
+        return false;
+      } else {
+        // Save
+        await _supabase.from('saved_posts').insert({'user_id': user.id, 'post_id': postId});
+        return true;
+      }
+    } catch (e) {
+      log('Error toggling saved post: $e');
+      rethrow;
+    }
+  }
+
+  /// 3. Fetch Full Saved Posts (Safe 2-Step Method)
+  Future<List<Map<String, dynamic>>> getMySavedPosts() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return [];
+
+    try {
+      // Step 1: Get the list of saved post IDs for this user
+      final savedResponse = await _supabase
+          .from('saved_posts')
+          .select('post_id')
+          .eq('user_id', user.id)
+          .order('created_at', ascending: false); // Newest saves first
+
+      if ((savedResponse as List).isEmpty) return [];
+
+      // Extract the IDs into a simple list
+      final List<dynamic> postIds = savedResponse.map((e) => e['post_id']).toList();
+
+      // Step 2: Fetch the full post details for ONLY those IDs
+      final postsResponse = await _supabase
+          .from('posts')
+          .select('*, users(full_name), post_images(image_url), comments(type)')
+          .filter('id', 'in', postIds); // Magic filter: only get posts in our ID list
+
+      List<Map<String, dynamic>> posts = List<Map<String, dynamic>>.from(postsResponse);
+
+      // Step 3: Sort them so the most recently saved post appears at the top
+      posts.sort((a, b) => postIds.indexOf(a['id']).compareTo(postIds.indexOf(b['id'])));
+
+      return posts;
+    } catch (e) {
+      // Changed from 'log' to 'print' so it's highly visible in your Run console!
+      print('--- ERROR FETCHING SAVED POSTS: $e ---');
+      return [];
+    }
+  }
+
 }

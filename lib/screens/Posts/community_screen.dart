@@ -18,8 +18,11 @@ class CommunityScreen extends StatefulWidget {
 class _CommunityScreenState extends State<CommunityScreen> {
   final CommunityService _communityService = CommunityService();
 
+  Set<int> _savedPostIds = {};
   bool _isLoading = true;
   List<Map<String, dynamic>> _posts = [];
+
+
 
   // --- NEW: Search Controller ---
   final TextEditingController _searchController = TextEditingController();
@@ -49,9 +52,11 @@ class _CommunityScreenState extends State<CommunityScreen> {
         sortBy: _selectedSort,
         searchQuery: _searchController.text.trim(),
       );
+      final savedIds = await _communityService.getSavedPostIds();
       if (mounted) {
         setState(() {
           _posts = posts;
+          _savedPostIds = savedIds;
           _isLoading = false;
         });
       }
@@ -222,6 +227,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
   Future<void> _deletePost(int postId) async {
     // ... your existing delete logic ...
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -408,13 +415,55 @@ class _CommunityScreenState extends State<CommunityScreen> {
                                 ),
                               ],
                             ),
-                            IconButton(icon: Icon(Icons.bookmark_border, color: Colors.grey.shade600), onPressed: () {
-                              if (currentUser == null) {
-                                showLoginRequiredDialog(context);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved to bookmarks!')));
-                              }
-                            }),
+                            // Save Bookmark Icon (Layer 5)
+                            IconButton(
+                              icon: Icon(
+                                _savedPostIds.contains(post['id']) ? Icons.bookmark : Icons.bookmark_border,
+                                color: _savedPostIds.contains(post['id']) ? const Color(0xFF6A1B9A) : Colors.grey.shade600,
+                              ),
+                              onPressed: () async {
+                                final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+                                if (currentUser == null) {
+                                  showLoginRequiredDialog(context); // Auth check
+                                  return;
+                                }
+
+                                final int pId = post['id'];
+                                final bool isCurrentlySaved = _savedPostIds.contains(pId);
+
+                                // Optimistic UI Update (instant feedback)
+                                setState(() {
+                                  if (isCurrentlySaved) {
+                                    _savedPostIds.remove(pId);
+                                  } else {
+                                    _savedPostIds.add(pId);
+                                  }
+                                });
+
+                                try {
+                                  // Run backend logic
+                                  await _communityService.toggleSavedPost(pId, isCurrentlySaved);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                      content: Text(isCurrentlySaved ? 'Removed from saved' : 'Post saved'),
+                                      duration: const Duration(seconds: 1),
+                                    ));
+                                  }
+                                } catch (e) {
+                                  // Rollback optimistic update on failure
+                                  if (mounted) {
+                                    setState(() {
+                                      if (isCurrentlySaved) {
+                                        _savedPostIds.add(pId);
+                                      } else {
+                                        _savedPostIds.remove(pId);
+                                      }
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Network error. Could not save.')));
+                                  }
+                                }
+                              },
+                            ),
                           ],
                         ),
                       ],
