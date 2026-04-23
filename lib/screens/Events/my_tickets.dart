@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/event_model.dart';
 import '../../models/event_time_model.dart';
-import '../../models/payment_model.dart';
 import '../../services/payment_service.dart';
 import '../../services/ticket_service.dart';
 import '../../services/user_service.dart';
