@@ -17,7 +17,7 @@ class SensorService {
     });
 
     // 2. Detect if phone is steady
-    _accelerometerSubscription = accelerometerEvents.listen((AccelerometerEvent event) {
+    _accelerometerSubscription = accelerometerEvents.listen((  AccelerometerEvent event) {
       if (event.x.abs() < 0.1 && event.y.abs() < 0.1) {
         // Phone is stationary
       }
