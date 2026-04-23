@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../models/user_model.dart';
 import '../../providers/user_provider.dart';
@@ -71,9 +72,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Change Avatar',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+              Text(
+                'change_avatar'.tr(),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
               ),
               const SizedBox(height: 8),
               ListTile(
@@ -81,7 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   backgroundColor: Color(0xFFEDE7F6),
                   child: Icon(Icons.photo_library_outlined, color: Color(0xFF6A1B9A)),
                 ),
-                title: const Text('Choose from Gallery'),
+                title: Text('choose_gallery'.tr()),
                 onTap: () async {
                   Navigator.pop(ctx);
                   await _pickFromSource(ImageSource.gallery);
@@ -92,7 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   backgroundColor: Color(0xFFE8F5E9),
                   child: Icon(Icons.camera_alt_outlined, color: Colors.green),
                 ),
-                title: const Text('Take a Photo'),
+                title: Text('take_photo'.tr()),
                 onTap: () async {
                   Navigator.pop(ctx);
                   await _pickFromSource(ImageSource.camera);
@@ -115,7 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error picking image')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('err_picking_image'.tr())));
       }
     }
   }
@@ -123,21 +124,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ─── PROFILE UPDATE ───
   Future<void> _handleSaveProfile(UserModel currentUser) async {
     if (_fullNameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Full name cannot be empty.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('err_fullname_empty'.tr())));
       return;
     }
 
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Update Profile'),
-        content: const Text('Are you sure you want to save these changes?'),
+        title: Text('update_profile'.tr()),
+        content: Text('confirm_save_changes'.tr()),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('cancel'.tr())),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A1B9A), foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm'),
+            child: Text('confirm'.tr()),
           ),
         ],
       ),
@@ -178,12 +179,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isLoading = false;
           _avatarFile = null;
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('profile_updated_success'.tr()), backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${'error_prefix'.tr()}$e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -203,29 +204,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final confirmPass = _confirmPasswordController.text;
 
     if (newPass.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New password must be at least 6 characters long.'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('err_pass_length'.tr()), backgroundColor: Colors.red));
       return;
     }
     if (newPass != confirmPass) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New password and confirm password do not match.'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('err_pass_match'.tr()), backgroundColor: Colors.red));
       return;
     }
     if (currentPass.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Current password is required.'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('err_current_pass'.tr()), backgroundColor: Colors.red));
       return;
     }
 
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Change Password'),
-        content: const Text('Are you sure you want to securely change your password?'),
+        title: Text('change_password'.tr()),
+        content: Text('confirm_change_password'.tr()),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('cancel'.tr())),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm'),
+            child: Text('confirm'.tr()),
           ),
         ],
       ),
@@ -239,7 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       try {
         await _authService.signIn(email: currentUser.email, password: currentPass);
       } catch (authError) {
-        throw Exception("Current password is incorrect.");
+        throw Exception('incorrect_password'.tr());
       }
 
       await Supabase.instance.client.auth.updateUser(UserAttributes(password: newPass));
@@ -252,7 +253,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _newPasswordController.clear();
           _confirmPasswordController.clear();
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password changed successfully!'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('pass_changed_success'.tr()), backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) {
@@ -277,13 +278,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = Provider.of<UserProvider>(context).currentUser;
 
     if (user == null) {
-      return const Scaffold(body: Center(child: Text("Please log in to view your profile.")));
+      return Scaffold(body: Center(child: Text('please_login'.tr())));
     }
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('User Profile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text('user_profile'.tr(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF6A1B9A),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -302,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))],
                   ),
                   child: Column(
                     children: [
@@ -338,7 +339,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           textAlign: TextAlign.center,
                           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                           decoration: InputDecoration(
-                            hintText: "Full Name",
+                            hintText: 'full_name'.tr(),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
@@ -353,20 +354,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Text(user.email, style: const TextStyle(fontSize: 16, color: Colors.black54)),
                       if (user.studentId != null && user.studentId!.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        Text('Student ID: ${user.studentId}', style: const TextStyle(fontSize: 14, color: Colors.black45)),
+                        Text('${'student_id_prefix'.tr()}${user.studentId}', style: const TextStyle(fontSize: 14, color: Colors.black45)),
                       ],
                       const SizedBox(height: 24),
 
                       if (_isEditingProfile)
                         Row(
                           children: [
-                            Expanded(child: OutlinedButton(onPressed: () => _cancelProfileEdit(user), child: const Text('Cancel'))),
+                            Expanded(child: OutlinedButton(onPressed: () => _cancelProfileEdit(user), child: Text('cancel'.tr()))),
                             const SizedBox(width: 12),
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                                 onPressed: () => _handleSaveProfile(user),
-                                child: const Text('Save'),
+                                child: Text('save'.tr()),
                               ),
                             ),
                           ],
@@ -376,7 +377,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           width: double.infinity,
                           child: OutlinedButton.icon(
                             icon: const Icon(Icons.edit, size: 18),
-                            label: const Text('Edit Profile'),
+                            label: Text('edit_profile'.tr()),
                             onPressed: () => setState(() {
                               _isEditingProfile = true;
                               _isChangingPassword = false;
@@ -402,19 +403,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))],
                   ),
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     leading: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                          color: const Color(0xFF6A1B9A).withOpacity(0.1),
+                          color: const Color(0xFF6A1B9A).withValues(alpha: 0.1),
                           shape: BoxShape.circle
                       ),
                       child: const Icon(Icons.bookmark, color: Color(0xFF6A1B9A)),
                     ),
-                    title: const Text("Saved Posts", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1A237E))),
+                    title: Text('saved_posts'.tr(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1A237E))),
                     trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                     onTap: () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPostsScreen()));
@@ -431,16 +432,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.security, color: Color(0xFF1A237E)),
-                          SizedBox(width: 10),
-                          Text("Security Settings", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
+                          const Icon(Icons.security, color: Color(0xFF1A237E)),
+                          const SizedBox(width: 10),
+                          Text('security_settings'.tr(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -450,7 +451,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           controller: _currentPasswordController,
                           obscureText: true,
                           decoration: InputDecoration(
-                            labelText: "Current Password",
+                            labelText: 'current_password'.tr(),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             prefixIcon: const Icon(Icons.lock_outline),
                           ),
@@ -460,7 +461,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           controller: _newPasswordController,
                           obscureText: true,
                           decoration: InputDecoration(
-                            labelText: "New Password",
+                            labelText: 'new_password'.tr(),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             prefixIcon: const Icon(Icons.lock_reset),
                           ),
@@ -470,7 +471,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           controller: _confirmPasswordController,
                           obscureText: true,
                           decoration: InputDecoration(
-                            labelText: "Confirm New Password",
+                            labelText: 'confirm_new_password'.tr(),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             prefixIcon: const Icon(Icons.check_circle_outline),
                           ),
@@ -478,13 +479,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 24),
                         Row(
                           children: [
-                            Expanded(child: OutlinedButton(onPressed: _cancelPasswordEdit, child: const Text('Cancel'))),
+                            Expanded(child: OutlinedButton(onPressed: _cancelPasswordEdit, child: Text('cancel'.tr()))),
                             const SizedBox(width: 12),
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
                                 onPressed: () => _handleSavePassword(user),
-                                child: const Text('Confirm'),
+                                child: Text('confirm'.tr()),
                               ),
                             ),
                           ],
@@ -494,7 +495,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             icon: const Icon(Icons.password, size: 18),
-                            label: const Text('Change Password'),
+                            label: Text('change_password'.tr()),
                             onPressed: () => setState(() {
                               _isChangingPassword = true;
                               _isEditingProfile = false;
@@ -518,7 +519,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           if (_isLoading)
             Container(
-              color: Colors.black.withOpacity(0.3), // Changed .withValues() to standard .withOpacity() to avoid potential version errors
+              color: Colors.black.withValues(alpha: 0.3), // Changed .withValues() to standard .withOpacity() to avoid potential version errors
               child: const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A))),
             ),
         ],

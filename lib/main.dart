@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:uni_path/providers/user_provider.dart';
 import 'package:uni_path/screens/home.dart';
 import 'package:uni_path/screens/Events/event_details.dart';
@@ -26,12 +27,24 @@ Future<void> main() async {
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
+  await EasyLocalization.ensureInitialized();
+
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => UserProvider()),
+    EasyLocalization(
+      supportedLocales: const [
+        Locale('en'),
+        Locale('ms'),
+        Locale('zh'),
+        Locale('ja'),
       ],
-      child: const MainApp(),
+      path: 'assets/translations',
+      fallbackLocale: const Locale('en'),
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => UserProvider()),
+        ],
+        child: const MainApp(),
+      ),
     ),
   );
 }
@@ -139,12 +152,17 @@ class _MainAppState extends State<MainApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      localizationsDelegates: context.localizationDelegates,
+      supportedLocales: context.supportedLocales,
+      locale: context.locale,
       navigatorKey: globalNavigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'UniPath',
       theme: ThemeData(
         useMaterial3: true,
         primarySwatch: Colors.purple,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6A1B9A), brightness: Brightness.light),
+        scaffoldBackgroundColor: const Color(0xFFF5F7F9),
       ),
       home: const HomePage(),
     );
