@@ -1,4 +1,5 @@
 import 'dart:developer';
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 
@@ -16,6 +17,20 @@ class UserService {
     } catch (e) {
       log('Error creating user profile: $e');
       rethrow;
+    }
+  }
+
+  /// Upload avatar image to supabase storage and return the public URL
+  Future<String?> uploadAvatar(File imageFile) async {
+    try {
+      final fileExtension = imageFile.path.split('.').last;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_avatar.$fileExtension';
+      await _supabase.storage.from('avatars').upload(fileName, imageFile);
+      final publicUrl = _supabase.storage.from('avatars').getPublicUrl(fileName);
+      return publicUrl;
+    } catch (e) {
+      log('Error uploading avatar: $e');
+      return null;
     }
   }
 

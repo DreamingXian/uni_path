@@ -157,11 +157,11 @@ class _HomePageState extends State<HomePage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildBottomIcon(Icons.forum, 0),      // Community
-              _buildBottomIcon(Icons.event, 1),      // Events
+              _buildBottomIcon(context, Icons.forum, 0, user),      // Community
+              _buildBottomIcon(context, Icons.event, 1, user),      // Events
               const SizedBox(width: 40),             // Gap for the center button
-              _buildBottomIcon(Icons.calendar_month, 2), // Schedule
-              _buildBottomIcon(Icons.person, 3),     // Profile
+              _buildBottomIcon(context, Icons.calendar_month, 2, user), // Schedule
+              _buildBottomIcon(context, Icons.person, 3, user),     // Profile
             ],
           ),
         ),
@@ -492,10 +492,16 @@ class _HomePageState extends State<HomePage> {
   // -------------------------------------------------------
 
   // Helper for Bottom Nav Icons
-  Widget _buildBottomIcon(IconData icon, int index) {
+  Widget _buildBottomIcon(BuildContext context, IconData icon, int index, dynamic user) {
     return IconButton(
       icon: Icon(icon, color: _currentIndex == index ? const Color(0xFF6A1B9A) : Colors.grey),
-      onPressed: () => setState(() => _currentIndex = index),
+      onPressed: () {
+        if (index == 3 && user == null) {
+          _showLoginPrompt(context);
+        } else {
+          setState(() => _currentIndex = index);
+        }
+      },
     );
   }
 
