@@ -14,8 +14,9 @@ import 'Events/scan_qr_nfc.dart';
 import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
 import 'Profiles/profile_screen.dart';
+import 'Profiles/saved_posts_screen.dart';
 import 'Posts/create_post_screen.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -348,11 +349,6 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.history, color: Color(0xFF6A1B9A)),
-              title: const Text('XXX'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
               leading: Icon(user.role == 'society' ? Icons.event_note : Icons.local_activity, color: const Color(0xFF6A1B9A)),
               title: Text(user.role == 'society' ? 'manage_events'.tr() : 'manage_tickets'.tr()),
               onTap: () {
@@ -405,8 +401,11 @@ class _HomePageState extends State<HomePage> {
               ),
             ListTile(
               leading: const Icon(Icons.bookmark_border, color: Color(0xFF6A1B9A)),
-              title: const Text('XXX'),
-              onTap: () => Navigator.pop(context),
+              title: Text('saved_posts'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedPostsScreen()));
+              },
             ),
           ] else ...[
             ListTile(
@@ -417,26 +416,11 @@ class _HomePageState extends State<HomePage> {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanQRNFCScreen()));
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.more_horiz, color: Color(0xFF6A1B9A)),
-              title: const Text('XXX'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.more_horiz, color: Color(0xFF6A1B9A)),
-              title: const Text('XXX'),
-              onTap: () => Navigator.pop(context),
-            ),
           ],
 
           const Spacer(),
 
           // --- Bottom General Links ---
-          ListTile(
-            leading: const Icon(Icons.settings_outlined),
-            title: Text('settings'.tr()),
-            onTap: () => Navigator.pop(context),
-          ),
           ListTile(
             leading: const Icon(Icons.language),
             title: Text('language'.tr()),
@@ -448,7 +432,13 @@ class _HomePageState extends State<HomePage> {
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: Text('about_unipath'.tr()),
-            onTap: () => Navigator.pop(context),
+            onTap: () async {
+              Navigator.pop(context);
+              final Uri url = Uri.parse('https://www.tarc.edu.my/');
+              if (!await launchUrl(url)) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch URL')));
+              }
+            },
           ),
           
           const Divider(),
