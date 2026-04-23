@@ -1,10 +1,16 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';
 import '../../models/event_model.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/ndef_record.dart';
 import '../../services/event_service.dart';
 import '../../services/email_service.dart';
 import 'edit_event_form.dart';
+import 'validate_ticket.dart';
 
 class UpdateEventScreen extends StatelessWidget {
   final EventModel event;
@@ -18,11 +24,13 @@ class UpdateEventScreen extends StatelessWidget {
     if (event.eventTimes == null || event.eventTimes!.isEmpty) return event.status;
 
     final now = DateTime.now();
-    DateTime minStart = event.eventTimes!.first.startDateTime;
+    // RULE MODIFICATION: Events become 'Ongoing' 3 hours early for preemptive ticket scanning. Change 'hours: 3' below.
+    DateTime minStart = event.eventTimes!.first.startDateTime.subtract(const Duration(hours: 3));
     DateTime maxEnd = event.eventTimes!.first.endDateTime;
 
     for (var t in event.eventTimes!) {
-      if (t.startDateTime.isBefore(minStart)) minStart = t.startDateTime;
+      final adjustedStart = t.startDateTime.subtract(const Duration(hours: 3));
+      if (adjustedStart.isBefore(minStart)) minStart = adjustedStart;
       if (t.endDateTime.isAfter(maxEnd)) maxEnd = t.endDateTime;
     }
 
@@ -58,6 +66,13 @@ class UpdateEventScreen extends StatelessWidget {
         title: const Text('Event Details', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF6A1B9A),
         foregroundColor: Colors.white,
+        actions: [
+          if (currentStatus != 'draft')
+            IconButton(
+              icon: const Icon(Icons.share, color: Colors.white),
+              onPressed: () => _showShareDialog(context, event),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
@@ -310,7 +325,7 @@ class UpdateEventScreen extends StatelessWidget {
                   ]
                 ],
               )
-            else
+            else ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 15),
@@ -326,6 +341,31 @@ class UpdateEventScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              if (currentStatus == 'ongoing') ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // We push without needing to wait for a return to redraw, since it's just validation
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ValidateTicketScreen(event: event),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
+                    label: const Text('Validate Ticket', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A1B9A),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
             const SizedBox(height: 20),
           ],
         ),
@@ -563,5 +603,234 @@ class UpdateEventScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _showShareDialog(BuildContext context, EventModel event) {
+    if (event.id == null) return;
+    
+    final String deepLinkUri = 'unipath://unipath.com/event/${event.id}';
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(ctx),
+                    child: const Icon(Icons.close, color: Colors.grey),
+                  ),
+                ),
+                const Text(
+                  'Share Event',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Scan this QR code or write it to an NFC tag to instantly open this event!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: Colors.black54),
+                ),
+                const SizedBox(height: 20),
+                QrImageView(
+                  data: deepLinkUri,
+                  version: QrVersions.auto,
+                  size: 200.0,
+                  backgroundColor: Colors.white,
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _writeShareNfc(context, event.id!);
+                    },
+                    icon: const Icon(Icons.nfc, color: Colors.white),
+                    label: const Text('Write NFC Tag', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A1B9A),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                )
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _writeShareNfc(BuildContext context, int eventId) async {
+    final availability = await NfcManager.instance.checkAvailability();
+    if (availability != NfcAvailability.enabled) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('NFC is not supported or is disabled on this device.')),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        bool isDetected = false;
+        bool isWriting = false;
+        NfcTag? detectedTag;
+        StateSetter? dialogSetState;
+
+        NfcManager.instance.startSession(
+          pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
+          onDiscovered: (NfcTag tag) async {
+            if (dialogSetState != null) {
+              dialogSetState!(() {
+                detectedTag = tag;
+              });
+            }
+          },
+        );
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            dialogSetState = setDialogState;
+            
+            if (detectedTag != null && !isDetected) {
+              isDetected = true;
+            }
+
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isDetected ? Icons.nfc : Icons.contactless_outlined,
+                      size: 64,
+                      color: isDetected ? Colors.green : const Color(0xFF6A1B9A),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isDetected ? 'NFC Detected' : 'NFC',
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: isDetected ? Colors.green : Colors.black87),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isDetected
+                          ? 'Ready to write event link onto the tag?'
+                          : 'Approach an NFC tag to write the Share deep-link.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 24),
+                    if (!isDetected)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            NfcManager.instance.stopSession();
+                            Navigator.pop(ctx);
+                          },
+                          child: const Text('Cancel'),
+                        ),
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: isWriting ? null : () {
+                                NfcManager.instance.stopSession();
+                                Navigator.pop(ctx);
+                              },
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: isWriting ? null : () async {
+                                setDialogState(() => isWriting = true);
+                                try {
+                                  final ndef = Ndef.from(detectedTag!);
+                                  if (ndef == null || !ndef.isWritable) {
+                                    throw Exception('Tag is not NDEF writable');
+                                  }
+                                  
+                                  // NDEF URI Payload encoding
+                                  // 0x00 prefix corresponds to "(no prefix) raw string" for Custom Schemes
+                                  final prefix = [0x00];
+                                  final uriBytes = 'unipath://unipath.com/event/$eventId'.codeUnits;
+                                  final payloadBytes = Uint8List.fromList([...prefix, ...uriBytes]);
+                                  
+                                  final record = NdefRecord(
+                                    typeNameFormat: TypeNameFormat.wellKnown,
+                                    type: Uint8List.fromList([0x55]), // 'U' for URI
+                                    identifier: Uint8List(0),
+                                    payload: payloadBytes,
+                                  );
+
+                                  final message = NdefMessage(records: [record]);
+                                  await ndef.write(message: message);
+                                  
+                                  if (ctx.mounted) {
+                                    NfcManager.instance.stopSession();
+                                    Navigator.pop(ctx);
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Successfully wrote Event link to NFC tag!'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      SnackBar(content: Text('Failed to write: $e'), backgroundColor: Colors.red),
+                                    );
+                                  }
+                                  setDialogState(() => isWriting = false);
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6A1B9A),
+                                foregroundColor: Colors.white,
+                              ),
+                              child: isWriting
+                                  ? const SizedBox(
+                                      height: 20, width: 20,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : const Text('Write'),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      // Ensure session is disabled even if they swipe the dialog away
+      NfcManager.instance.stopSession();
+    });
   }
 }

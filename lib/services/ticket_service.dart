@@ -103,6 +103,21 @@ class TicketService {
     }
   }
 
+  /// Fetches all tickets with their nested user info for a specific event. Used by Society scanning.
+  Future<List<Map<String, dynamic>>> getTicketsForValidation(int eventId) async {
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('*, users(id, full_name, student_id, email)')
+          .eq('event_id', eventId);
+      
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      log('Error fetching tickets for validation: $e');
+      return [];
+    }
+  }
+
   /// The "Scanner" function: Find a ticket by its UUID pass code.
   Future<TicketModel?> verifyTicketByCode(String passCode) async {
     try {

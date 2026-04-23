@@ -92,7 +92,8 @@ class _ManageEventsScreenState extends State<ManageEventsScreen> {
       final isPublished = e.status == 'published';
 
       final times = e.eventTimes ?? [];
-      bool hasStarted = times.any((t) => t.startDateTime.isBefore(now));
+      // RULE MODIFICATION: Events become 'Ongoing' 3 hours early for preemptive scanning. Change 'hours: 3' below.
+      bool hasStarted = times.any((t) => t.startDateTime.subtract(const Duration(hours: 3)).isBefore(now));
       bool hasEnded = times.isNotEmpty && times.every((t) => t.endDateTime.isBefore(now));
       bool isOngoing = hasStarted && !hasEnded;
       bool isNotStarted = !hasStarted && !hasEnded;
