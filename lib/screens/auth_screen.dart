@@ -4,6 +4,9 @@ import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
+import '../services/user_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'home.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -18,6 +21,7 @@ class _AuthScreenState extends State<AuthScreen> {
   late bool isLogin; // State to toggle between Login and Sign Up
   bool isPasswordVisible = false;
   bool _isLoading = false; // True while waiting for Supabase response
+  bool rememberMe = true; // Default to checked
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -116,12 +120,32 @@ class _AuthScreenState extends State<AuthScreen> {
                       controller: _passwordController
                     ),
                     if (isLogin)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () {},
-                          child: const Text('Forgot Password?', style: TextStyle(color: Color(0xFF3F51B5))),
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: rememberMe,
+                                activeColor: const Color(0xFF6A1B9A),
+                                onChanged: (value) {
+                                  setState(() => rememberMe = value ?? true);
+                                },
+                              ),
+                              const Text('Remember Me', style: TextStyle(color: Color(0xFF37474F))),
+                            ],
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (ctx) => const _ForgotPasswordDialog(),
+                              );
+                            },
+                            child: const Text('Forgot Password?', style: TextStyle(color: Color(0xFF3F51B5))),
+                          ),
+                        ],
                       ),
                     const SizedBox(height: 24),
 
@@ -173,18 +197,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   Expanded(child: Divider()),
                 ],
               ),
-              const SizedBox(height: 20),
 
-              // --- Social Login ---
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: const Icon(Icons.g_mobiledata, size: 30),
-                label: const Text('Google'),
-                onPressed: () {},
-              ),
 
               const SizedBox(height: 30),
 
@@ -205,7 +218,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text(
-                    'Continue as Guest 🚀',
+                    'Continue as Guest',
                     style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -298,6 +311,10 @@ class _AuthScreenState extends State<AuthScreen> {
       UserModel? userProfile = await _authService.signIn(email: email, password: password);
 
       if (userProfile != null && mounted) {
+        // Save Remember Me preference natively
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('remember_me', rememberMe);
+
         Provider.of<UserProvider>(context, listen: false).setUser(userProfile);
         Navigator.pushAndRemoveUntil(
           context,
@@ -367,7 +384,248 @@ class _AuthScreenState extends State<AuthScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
           ),
         ),
-      ],
+    ]);
+  }
+}
+
+class _ForgotPasswordDialog extends StatefulWidget {
+  const _ForgotPasswordDialog();
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  int _step = 1; // 1 = Email & OTP, 2 = New Password
+  bool _isLoading = false;
+
+  final _emailController = TextEditingController();
+  final _otpController = TextEditingController();
+  final _newPassController = TextEditingController();
+  final _confirmPassController = TextEditingController();
+
+  Future<void> _sendOTP() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter your email first")));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final user = await UserService().getUserByEmail(email);
+      if (user == null) {
+        throw Exception("No account found with this email.");
+      }
+
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("OTP sent! Please check your email.", style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _verifyOTP() async {
+    final email = _emailController.text.trim();
+    final otp = _otpController.text.trim();
+    
+    if (email.isEmpty || otp.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Email and OTP are required")));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.auth.verifyOTP(email: email, token: otp, type: OtpType.recovery);
+      if (mounted) {
+        setState(() {
+          _step = 2; // Switch to password update phase
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Invalid OTP: ${e.toString()}"), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _changePassword() async {
+    final newPass = _newPassController.text;
+    final confirmPass = _confirmPassController.text;
+
+    if (newPass.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Password must be at least 6 characters"), backgroundColor: Colors.red));
+      return;
+    }
+    if (newPass != confirmPass) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passwords do not match"), backgroundColor: Colors.red));
+      return;
+    }
+
+    // Confirmation prompt
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Password Reset'),
+        content: const Text('Are you sure you want to securely change your password?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A1B9A), foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true), 
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.auth.updateUser(UserAttributes(password: newPass));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Password changed successfully! You can now log in."), backgroundColor: Colors.green));
+        Navigator.pop(context); // close dialog
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Password Recovery',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(Icons.close, color: Colors.grey),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            if (_step == 1) ...[
+              const Text('Enter your registered email to receive a 6-digit OTP code.', style: TextStyle(color: Colors.black54)),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _emailController,
+                decoration: InputDecoration(
+                  labelText: "Email",
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _otpController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: "6-Digit OTP",
+                        prefixIcon: const Icon(Icons.password),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _sendOTP,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                      backgroundColor: Colors.grey[200],
+                      foregroundColor: const Color(0xFF6A1B9A),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Get OTP', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _verifyOTP,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: const Color(0xFF6A1B9A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isLoading 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Verify OTP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ] else ...[
+              const Text('Your identity has been verified. Please enter your new password.', style: TextStyle(color: Colors.black54)),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _newPassController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "New Password",
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _confirmPassController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "Confirm Password",
+                  prefixIcon: const Icon(Icons.check_circle_outline),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _changePassword,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isLoading 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Save New Password', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ]
+          ],
+        ),
+      ),
     );
   }
 }
