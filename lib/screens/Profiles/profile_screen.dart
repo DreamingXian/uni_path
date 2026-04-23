@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../models/user_model.dart';
 import '../../providers/user_provider.dart';
 import '../../services/user_service.dart';
 import '../../services/auth_service.dart';
+import 'saved_posts_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -34,7 +36,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize standard fields securely after first build frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = Provider.of<UserProvider>(context, listen: false).currentUser;
       if (user != null) {
@@ -53,7 +54,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ─── IMAGE PICKING ───
-
   Future<void> _showImageSourceSheet() async {
     await showModalBottomSheet(
       context: context,
@@ -121,7 +121,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ─── PROFILE UPDATE ───
-
   Future<void> _handleSaveProfile(UserModel currentUser) async {
     if (_fullNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Full name cannot be empty.')));
@@ -137,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A1B9A), foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true), 
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Confirm'),
           ),
         ],
@@ -160,7 +159,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
 
-      // Create updated user model
       final updatedUser = UserModel(
         id: currentUser.id,
         email: currentUser.email,
@@ -171,16 +169,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         createdAt: currentUser.createdAt,
       );
 
-      // Update Database
       await _userService.updateUser(updatedUser);
 
-      // Update Global State immediately
       if (mounted) {
         Provider.of<UserProvider>(context, listen: false).setUser(updatedUser);
         setState(() {
           _isEditingProfile = false;
           _isLoading = false;
-          _avatarFile = null; // Clear picked file so we rely on network image again
+          _avatarFile = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green));
       }
@@ -201,7 +197,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ─── PASSWORD UPDATE ───
-
   Future<void> _handleSavePassword(UserModel currentUser) async {
     final currentPass = _currentPasswordController.text;
     final newPass = _newPasswordController.text;
@@ -229,7 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true), 
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Confirm'),
           ),
         ],
@@ -241,14 +236,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Validate Current Password implicitly by attempting a background re-authentication
       try {
         await _authService.signIn(email: currentUser.email, password: currentPass);
       } catch (authError) {
         throw Exception("Current password is incorrect.");
       }
 
-      // 2. Auth successful, proceed to update the underlying Supabase Auth user password
       await Supabase.instance.client.auth.updateUser(UserAttributes(password: newPass));
 
       if (mounted) {
@@ -279,13 +272,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ─── UI BUILDERS ───
-
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<UserProvider>(context).currentUser;
 
     if (user == null) {
-      // Fallback UI in case intercept missed it
       return const Scaffold(body: Center(child: Text("Please log in to view your profile.")));
     }
 
@@ -303,6 +294,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.all(20.0),
             child: Column(
               children: [
+
                 // ── IDENTITY CARD ──
                 Container(
                   width: double.infinity,
@@ -310,11 +302,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))],
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
                   ),
                   child: Column(
                     children: [
-                      // Avatar
                       GestureDetector(
                         onTap: _isEditingProfile ? _showImageSourceSheet : null,
                         child: Stack(
@@ -341,7 +332,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Name
                       if (_isEditingProfile)
                         TextFormField(
                           controller: _fullNameController,
@@ -358,9 +348,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           user.fullName,
                           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
                         ),
-                      
+
                       const SizedBox(height: 8),
-                      // Immutable Details
                       Text(user.email, style: const TextStyle(fontSize: 16, color: Colors.black54)),
                       if (user.studentId != null && user.studentId!.isNotEmpty) ...[
                         const SizedBox(height: 4),
@@ -368,7 +357,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                       const SizedBox(height: 24),
 
-                      // Profile Actions
                       if (_isEditingProfile)
                         Row(
                           children: [
@@ -377,7 +365,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                onPressed: () => _handleSaveProfile(user), 
+                                onPressed: () => _handleSaveProfile(user),
                                 child: const Text('Save'),
                               ),
                             ),
@@ -391,7 +379,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             label: const Text('Edit Profile'),
                             onPressed: () => setState(() {
                               _isEditingProfile = true;
-                              _isChangingPassword = false; // mutually exclusive forms for cleanliness
+                              _isChangingPassword = false;
                             }),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: const Color(0xFF6A1B9A),
@@ -404,8 +392,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ),
-                
-                const SizedBox(height: 30),
+
+                const SizedBox(height: 24),
+
+                // ── ACTIVITY SECTION (MERGED SAVED POSTS) ──
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                          color: const Color(0xFF6A1B9A).withOpacity(0.1),
+                          shape: BoxShape.circle
+                      ),
+                      child: const Icon(Icons.bookmark, color: Color(0xFF6A1B9A)),
+                    ),
+                    title: const Text("Saved Posts", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1A237E))),
+                    trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPostsScreen()));
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 24),
 
                 // ── SECURITY SECTION ──
                 Container(
@@ -414,7 +431,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))],
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -466,7 +483,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                onPressed: () => _handleSavePassword(user), 
+                                onPressed: () => _handleSavePassword(user),
                                 child: const Text('Confirm'),
                               ),
                             ),
@@ -498,10 +515,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          
+
           if (_isLoading)
             Container(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3), // Changed .withValues() to standard .withOpacity() to avoid potential version errors
               child: const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A))),
             ),
         ],
