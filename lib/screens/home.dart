@@ -90,17 +90,18 @@ class _HomePageState extends State<HomePage> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close : Icons.search, color: const Color(0xFF1A237E)),
-            onPressed: () {
-              setState(() {
-                _isSearching = !_isSearching;
-                if (!_isSearching) {
-                   _searchController.clear();
-                }
-              });
-            },
-          ),
+          if (_currentIndex != 3)
+            IconButton(
+              icon: Icon(_isSearching ? Icons.close : Icons.search, color: const Color(0xFF1A237E)),
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                     _searchController.clear();
+                  }
+                });
+              },
+            ),
         ],
       ),
 
