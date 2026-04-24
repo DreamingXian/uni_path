@@ -12,6 +12,7 @@ class ScheduleModel {
   // New Fields added for filtering and UI labels
   final String? labelName;
   final String? labelColor;
+  final bool isHomework;
 
   ScheduleModel({
     this.id,
@@ -26,6 +27,7 @@ class ScheduleModel {
     this.createdAt,
     this.labelName,
     this.labelColor,
+    this.isHomework = false,
   });
 
   factory ScheduleModel.fromJson(Map<String, dynamic> json) => ScheduleModel(
@@ -43,6 +45,7 @@ class ScheduleModel {
         : null,
     labelName: json['label_name'],
     labelColor: json['label_color'],
+    isHomework: json['is_homework'] ?? false,
   );
 
   Map<String, dynamic> toMap() => {
@@ -55,6 +58,7 @@ class ScheduleModel {
     'end_time': endTime.toIso8601String(),
     'label_name': labelName,
     'label_color': labelColor,
+    'is_homework': isHomework,
     // user_id handled by auth.uid() default in DB
   };
 }

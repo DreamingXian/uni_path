@@ -11,6 +11,8 @@ import 'package:uni_path/services/event_service.dart';
 import 'package:uni_path/services/user_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:uni_path/services/notification_service.dart';
+import 'package:uni_path/services/schedule_service.dart';
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -22,12 +24,18 @@ Future<void> main() async {
   // Load environment variables from the bundled .env asset
   await dotenv.load(fileName: '.env');
 
+  // Initialize Supabase
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
   await EasyLocalization.ensureInitialized();
+
+  // --- MODULE 4 INITIALIZATION ---
+  // Initialize notifications (Timezones, Channels, and Permissions)
+  final notificationService = NotificationService();
+  await notificationService.init();
 
   runApp(
     EasyLocalization(
@@ -80,6 +88,10 @@ class _MainAppState extends State<MainApp> {
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         _loadUser(session.user.id);
+
+        // --- MODULE 4: BACKGROUND SYNC ---
+        // Sync local SQLite database with fresh data on app boot
+        ScheduleService().getMySchedules();
       }
     }
 
@@ -163,6 +175,7 @@ class _MainAppState extends State<MainApp> {
         primarySwatch: Colors.purple,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6A1B9A), brightness: Brightness.light),
         scaffoldBackgroundColor: const Color(0xFFF5F7F9),
+        colorSchemeSeed: Colors.purple, // Using seeds is cleaner in Material 3
       ),
       home: const HomePage(),
     );
