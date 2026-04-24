@@ -225,7 +225,39 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   Future<void> _deletePost(int postId) async {
-    // ... your existing delete logic ...
+    // 1. Show a confirmation dialog first
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Post?'),
+        content: const Text('This will permanently remove your post and media.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    // 2. If they clicked Delete, run the database command
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      try {
+        await _communityService.deletePost(postId);
+        // Refresh the feed to show the post is gone
+        await _loadPosts();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post deleted.')));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting: $e')));
+        }
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
 
