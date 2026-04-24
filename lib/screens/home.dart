@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:easy_localization/easy_localization.dart';
 import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
 import '../services/payment_dashboard_service.dart';
@@ -14,8 +15,9 @@ import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
 import 'Schedules/create_schedule_screen.dart'; // [MEMBER 3 ADDITION]
 import 'Profiles/profile_screen.dart';
+import 'Profiles/saved_posts_screen.dart';
 import 'Posts/create_post_screen.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -55,6 +57,47 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _showLanguageDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('language'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildLanguageOption(context, 'English', 'en'),
+              _buildLanguageOption(context, 'Bahasa Melayu', 'ms'),
+              _buildLanguageOption(context, '简体中文', 'zh'),
+              _buildLanguageOption(context, '日本語', 'ja'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: Text('cancel'.tr()),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildLanguageOption(BuildContext context, String title, String locale) {
+    return RadioListTile<String>(
+      title: Text(title),
+      value: locale,
+      groupValue: context.locale.languageCode,
+      activeColor: const Color(0xFF6A1B9A),
+      onChanged: (String? value) {
+        if (value != null) {
+          context.setLocale(Locale(value));
+          Navigator.of(context).pop();
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<UserProvider>(context).currentUser;
@@ -77,16 +120,16 @@ class _HomePageState extends State<HomePage> {
             ? TextField(
           controller: _searchController,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Search UniPath...',
+          decoration: InputDecoration(
+            hintText: 'search_hint'.tr(),
             border: InputBorder.none,
           ),
         )
             : GestureDetector(
           onTap: _scrollToTop,
-          child: const Text(
-            'UniPath Hub',
-            style: TextStyle(color: Color(0xFF1A237E), fontWeight: FontWeight.bold),
+          child: Text(
+            'unipath_hub'.tr(),
+            style: const TextStyle(color: Color(0xFF1A237E), fontWeight: FontWeight.bold),
           ),
         ),
         centerTitle: true,
@@ -268,7 +311,7 @@ class _HomePageState extends State<HomePage> {
 
                 // 2. The Name
                 Text(
-                  isLoggedIn ? user.fullName : 'Guest Student',
+                  isLoggedIn ? user.fullName : 'guest_student'.tr(),
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -302,20 +345,15 @@ class _HomePageState extends State<HomePage> {
           if (isLoggedIn) ...[
             ListTile(
               leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF6A1B9A)),
-              title: const Text('Scan QR / NFC'),
+              title: Text('scan_qr_nfc'.tr()),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanQRNFCScreen()));
               },
             ),
             ListTile(
-              leading: const Icon(Icons.history, color: Color(0xFF6A1B9A)),
-              title: const Text('XXX'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
               leading: Icon(user.role == 'society' ? Icons.event_note : Icons.local_activity, color: const Color(0xFF6A1B9A)),
-              title: Text(user.role == 'society' ? 'Manage Events' : 'Manage Tickets'),
+              title: Text(user.role == 'society' ? 'manage_events'.tr() : 'manage_tickets'.tr()),
               onTap: () {
                 Navigator.pop(context);
                 if (user.role == 'society') {
@@ -356,7 +394,7 @@ class _HomePageState extends State<HomePage> {
                           ),
                       ],
                     ),
-                    title: const Text('Payment Approval'),
+                    title: Text('payment_approval'.tr()),
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentApprovalDashboard()));
@@ -366,27 +404,20 @@ class _HomePageState extends State<HomePage> {
               ),
             ListTile(
               leading: const Icon(Icons.bookmark_border, color: Color(0xFF6A1B9A)),
-              title: const Text('XXX'),
-              onTap: () => Navigator.pop(context),
+              title: Text('saved_posts'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedPostsScreen()));
+              },
             ),
           ] else ...[
             ListTile(
               leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF6A1B9A)),
-              title: const Text('Scan QR / NFC'),
+              title: Text('scan_qr_nfc'.tr()),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanQRNFCScreen()));
               },
-            ),
-            ListTile(
-              leading: const Icon(Icons.more_horiz, color: Color(0xFF6A1B9A)),
-              title: const Text('XXX'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.more_horiz, color: Color(0xFF6A1B9A)),
-              title: const Text('XXX'),
-              onTap: () => Navigator.pop(context),
             ),
           ],
 
@@ -394,14 +425,23 @@ class _HomePageState extends State<HomePage> {
 
           // --- Bottom General Links ---
           ListTile(
-            leading: const Icon(Icons.settings_outlined),
-            title: const Text('Settings'),
-            onTap: () => Navigator.pop(context),
+            leading: const Icon(Icons.language),
+            title: Text('language'.tr()),
+            onTap: () {
+              Navigator.pop(context);
+              _showLanguageDialog(context);
+            },
           ),
           ListTile(
             leading: const Icon(Icons.info_outline),
-            title: const Text('About UniPath'),
-            onTap: () => Navigator.pop(context),
+            title: Text('about_unipath'.tr()),
+            onTap: () async {
+              Navigator.pop(context);
+              final Uri url = Uri.parse('https://www.tarc.edu.my/');
+              if (!await launchUrl(url)) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch URL')));
+              }
+            },
           ),
 
           const Divider(),
@@ -410,13 +450,13 @@ class _HomePageState extends State<HomePage> {
           if (isLoggedIn)
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Logout', style: TextStyle(color: Colors.red)),
+              title: Text('logout'.tr(), style: const TextStyle(color: Colors.red)),
               onTap: () => _handleLogout(context),
             )
           else
             ListTile(
               leading: const Icon(Icons.login, color: Color(0xFF6A1B9A)),
-              title: const Text('Login', style: TextStyle(color: Color(0xFF6A1B9A), fontWeight: FontWeight.bold)),
+              title: Text('login'.tr(), style: const TextStyle(color: Color(0xFF6A1B9A), fontWeight: FontWeight.bold)),
               onTap: () {
                 Navigator.pop(context); // close drawer first
                 Navigator.push(

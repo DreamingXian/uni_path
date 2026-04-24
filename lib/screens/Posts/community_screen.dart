@@ -18,8 +18,14 @@ class CommunityScreen extends StatefulWidget {
 class _CommunityScreenState extends State<CommunityScreen> {
   final CommunityService _communityService = CommunityService();
 
+  Set<int> _savedPostIds = {};
   bool _isLoading = true;
   List<Map<String, dynamic>> _posts = [];
+
+
+
+  // --- NEW: Search Controller ---
+  final TextEditingController _searchController = TextEditingController();
 
   // --- NEW: Filter & Sort State Variables ---
   String _selectedCategory = 'All';
@@ -38,16 +44,19 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
   // --- UPGRADED: Load posts with active filters ---
   Future<void> _loadPosts() async {
-    setState(() => _isLoading = true);
+    if (_posts.isEmpty) setState(() => _isLoading = true);
     try {
       final posts = await _communityService.getFeedPosts(
         category: _selectedCategory,
         timeRange: _selectedTimeRange,
         sortBy: _selectedSort,
+        searchQuery: _searchController.text.trim(),
       );
+      final savedIds = await _communityService.getSavedPostIds();
       if (mounted) {
         setState(() {
           _posts = posts;
+          _savedPostIds = savedIds;
           _isLoading = false;
         });
       }
@@ -219,6 +228,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
     // ... your existing delete logic ...
   }
 
+
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -233,6 +244,38 @@ class _CommunityScreenState extends State<CommunityScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // --- NEW: Real-time Search Bar ---
+              TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() {}); // Refreshes UI so the 'Clear' X button appears
+                  _loadPosts();    // Instantly searches the database!
+                },
+                decoration: InputDecoration(
+                  hintText: "Search posts by title...",
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  // Show a clear button only if they have typed something
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                    icon: const Icon(Icons.clear, color: Colors.grey),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {});
+                      _loadPosts(); // Reload full feed when cleared
+                    },
+                  )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
               Row(
                 children: [
                   Expanded(
@@ -372,13 +415,55 @@ class _CommunityScreenState extends State<CommunityScreen> {
                                 ),
                               ],
                             ),
-                            IconButton(icon: Icon(Icons.bookmark_border, color: Colors.grey.shade600), onPressed: () {
-                              if (currentUser == null) {
-                                showLoginRequiredDialog(context);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved to bookmarks!')));
-                              }
-                            }),
+                            // Save Bookmark Icon (Layer 5)
+                            IconButton(
+                              icon: Icon(
+                                _savedPostIds.contains(post['id']) ? Icons.bookmark : Icons.bookmark_border,
+                                color: _savedPostIds.contains(post['id']) ? const Color(0xFF6A1B9A) : Colors.grey.shade600,
+                              ),
+                              onPressed: () async {
+                                final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+                                if (currentUser == null) {
+                                  showLoginRequiredDialog(context); // Auth check
+                                  return;
+                                }
+
+                                final int pId = post['id'];
+                                final bool isCurrentlySaved = _savedPostIds.contains(pId);
+
+                                // Optimistic UI Update (instant feedback)
+                                setState(() {
+                                  if (isCurrentlySaved) {
+                                    _savedPostIds.remove(pId);
+                                  } else {
+                                    _savedPostIds.add(pId);
+                                  }
+                                });
+
+                                try {
+                                  // Run backend logic
+                                  await _communityService.toggleSavedPost(pId, isCurrentlySaved);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                      content: Text(isCurrentlySaved ? 'Removed from saved' : 'Post saved'),
+                                      duration: const Duration(seconds: 1),
+                                    ));
+                                  }
+                                } catch (e) {
+                                  // Rollback optimistic update on failure
+                                  if (mounted) {
+                                    setState(() {
+                                      if (isCurrentlySaved) {
+                                        _savedPostIds.add(pId);
+                                      } else {
+                                        _savedPostIds.remove(pId);
+                                      }
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Network error. Could not save.')));
+                                  }
+                                }
+                              },
+                            ),
                           ],
                         ),
                       ],

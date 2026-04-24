@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 import '../../models/event_model.dart';
 import '../../providers/user_provider.dart';
 
@@ -21,6 +22,35 @@ class TicketKeyCodeScreen extends StatefulWidget {
 }
 
 class _TicketKeyCodeScreenState extends State<TicketKeyCodeScreen> {
+  
+  @override
+  void initState() {
+    super.initState();
+    _setMaxBrightness();
+  }
+
+  Future<void> _setMaxBrightness() async {
+    try {
+      await ScreenBrightness().setApplicationScreenBrightness(1.0);
+    } catch (e) {
+      debugPrint("Failed to set max brightness: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _resetBrightness();
+    super.dispose();
+  }
+
+  Future<void> _resetBrightness() async {
+    try {
+      await ScreenBrightness().resetApplicationScreenBrightness();
+    } catch (e) {
+      debugPrint("Failed to reset brightness: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Extract passcode prefix before "-"

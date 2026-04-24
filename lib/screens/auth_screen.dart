@@ -6,6 +6,7 @@ import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
 import '../services/user_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'home.dart';
 
@@ -54,17 +55,17 @@ class _AuthScreenState extends State<AuthScreen> {
             children: [
               const SizedBox(height: 60),
               // --- Header Section ---
-              const Text(
-                'UniPath',
-                style: TextStyle(
+              Text(
+                'unipath_title'.tr(),
+                style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF1A237E), // Navy/Dark Charcoal
                 ),
               ),
               Text(
-                'Your Campus Companion',
-                style: TextStyle(fontSize: 16, color: Colors.blueGrey),
+                'unipath_subtitle'.tr(),
+                style: const TextStyle(fontSize: 16, color: Colors.blueGrey),
               ),
               const SizedBox(height: 40),
 
@@ -77,8 +78,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
                 child: Row(
                   children: [
-                    _buildToggleButton(title: 'Log In', active: isLogin, enabled: !_isLoading),
-                    _buildToggleButton(title: 'Sign Up', active: !isLogin, enabled: !_isLoading),
+                    _buildToggleButton(title: 'log_in'.tr(), active: isLogin, enabled: !_isLoading),
+                    _buildToggleButton(title: 'sign_up'.tr(), active: !isLogin, enabled: !_isLoading),
                   ],
                 ),
               ),
@@ -101,20 +102,20 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   children: [
                     if (!isLogin) ...[
-                      _buildTextField(label: 'Full Name', icon: Icons.person_outline, controller: _nameController),
+                      _buildTextField(label: 'full_name'.tr(), icon: Icons.person_outline, controller: _nameController),
                       const SizedBox(height: 16),
-                      _buildTextField(label: 'Student ID', icon: Icons.badge_outlined, controller: _studentIdController),
+                      _buildTextField(label: 'student_id'.tr(), icon: Icons.badge_outlined, controller: _studentIdController),
                       const SizedBox(height: 16),
                     ],
                     _buildTextField(
-                      label: 'University Email',
+                      label: 'university_email'.tr(),
                       icon: Icons.email_outlined,
                       placeholder: 'yourname@student.tarumt.edu.my',
                       controller: _emailController
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(
-                      label: 'Password',
+                      label: 'password'.tr(),
                       icon: Icons.lock_outline,
                       isPassword: true,
                       controller: _passwordController
@@ -132,7 +133,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                   setState(() => rememberMe = value ?? true);
                                 },
                               ),
-                              const Text('Remember Me', style: TextStyle(color: Color(0xFF37474F))),
+                              Text('remember_me'.tr(), style: const TextStyle(color: Color(0xFF37474F))),
                             ],
                           ),
                           TextButton(
@@ -143,7 +144,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                 builder: (ctx) => const _ForgotPasswordDialog(),
                               );
                             },
-                            child: const Text('Forgot Password?', style: TextStyle(color: Color(0xFF3F51B5))),
+                            child: Text('forgot_password'.tr(), style: const TextStyle(color: Color(0xFF3F51B5))),
                           ),
                         ],
                       ),
@@ -217,9 +218,9 @@ class _AuthScreenState extends State<AuthScreen> {
                     border: Border.all(color: Colors.blueAccent, style: BorderStyle.solid), // Note: Standard Flutter doesn't support dashed borders natively without a package, but we'll style it clean.
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    'Continue as Guest',
-                    style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold),
+                  child: Text(
+                    'continue_as_guest'.tr(),
+                    style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),

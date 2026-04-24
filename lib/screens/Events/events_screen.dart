@@ -5,6 +5,7 @@ import 'event_details.dart';
 import '../../services/event_service.dart';
 import '../../models/event_model.dart';
 import 'package:intl/intl.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 class EventsScreen extends StatefulWidget {
   final String searchQuery;
@@ -122,7 +123,7 @@ class _EventsScreenState extends State<EventsScreen> {
           child: _isLoading
               ? const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A)))
               : _filteredEvents.isEmpty
-                  ? const Center(child: Text("No events found.", style: TextStyle(color: Colors.grey)))
+                  ? Center(child: Text("no_events_found".tr(), style: const TextStyle(color: Colors.grey)))
                   : RefreshIndicator(
                       onRefresh: _fetchEvents,
                       color: const Color(0xFF6A1B9A),
@@ -154,7 +155,7 @@ class _EventsScreenState extends State<EventsScreen> {
           // Free Only Toggle (Most Right)
           Row(
             children: [
-              const Text("Free", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              Text("free".tr(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
               Transform.scale(
                 scale: 0.8,
                 child: Checkbox(
@@ -178,13 +179,13 @@ class _EventsScreenState extends State<EventsScreen> {
     String label;
     if (_timeSortType == 0) {
       icon = Icons.access_time;
-      label = "Most Recent";
+      label = "most_recent".tr();
     } else if (_timeSortType == 1) {
       icon = Icons.arrow_downward;
-      label = "Nearest Event";
+      label = "nearest_event".tr();
     } else {
       icon = Icons.arrow_upward;
-      label = "Farthest Event";
+      label = "farthest_event".tr();
     }
 
     return OutlinedButton.icon(
@@ -274,16 +275,16 @@ class _EventsScreenState extends State<EventsScreen> {
                     children: [
                       const Icon(Icons.location_on, size: 14, color: Color(0xFF6A1B9A)),
                       const SizedBox(width: 4),
-                      Text(event.locationName ?? 'No location provided', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                      Text(event.locationName ?? 'no_location'.tr(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                     ],
                   ),
                   const Divider(height: 20),
 
                   // --- SHOW ALL TIME SLOTS ---
-                  const Text("Schedules:", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  Text("schedules".tr(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
                   const SizedBox(height: 4),
                   if (formattedSchedules.isEmpty)
-                    const Text("No specific times.", style: TextStyle(fontSize: 12, color: Colors.black54))
+                    Text("no_specific_times".tr(), style: const TextStyle(fontSize: 12, color: Colors.black54))
                   else
                     ...formattedSchedules.map((timeStr) => Padding(
                       padding: const EdgeInsets.only(bottom: 4.0),
@@ -327,7 +328,7 @@ class _EventsScreenState extends State<EventsScreen> {
         border: Border.all(color: isFree ? Colors.green : Colors.blue),
       ),
       child: Text(
-        isFree ? "FREE" : "RM ${fee.toStringAsFixed(2)}",
+        isFree ? "free_caps".tr() : "RM ${fee.toStringAsFixed(2)}",
         style: TextStyle(color: isFree ? Colors.green[700] : Colors.blue[700], fontWeight: FontWeight.bold, fontSize: 10),
       ),
     );
