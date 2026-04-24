@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
-import '../../services/schedule_service.dart'; // USE THE SERVICE INSTEAD
-import '../../models/schedule_model.dart'; // IMPORT THE MODEL
+import '../../services/schedule_service.dart';
+import '../../models/schedule_model.dart';
 
 class CreateScheduleScreen extends StatefulWidget {
   const CreateScheduleScreen({super.key});
@@ -18,7 +17,6 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
   final _locController = TextEditingController();
   final _labelController = TextEditingController();
 
-  // Create an instance of the service
   final _scheduleService = ScheduleService();
 
   DateTime _selectedDate = DateTime.now();
@@ -31,48 +29,55 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
   Future<void> _saveSchedule() async {
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
 
-    if (user == null || user.id == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Session error. Please re-login.")));
+    // 1. Validation Checks
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("User session not found.")));
       return;
     }
 
-    if (_titleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a title")));
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Title is required")));
       return;
     }
 
     setState(() => _isSaving = true);
 
-    // Calculate actual DateTimes
-    final start = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _startTime.hour, _startTime.minute);
-    final end = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _endTime.hour, _endTime.minute);
+    // 2. Parse Times correctly
+    final startDT = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _startTime.hour, _startTime.minute);
+
+    // For homework, we can set end time to null as allowed by your SQL schema
+    DateTime? endDT;
+    if (!_isHomework) {
+      endDT = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _endTime.hour, _endTime.minute);
+    }
 
     try {
-      // 1. Create a ScheduleModel object
-      // This is much cleaner than raw Maps!
+      // 3. Create Model (Ensure this matches your ScheduleModel constructor)
       final newSchedule = ScheduleModel(
-        userId: user.id.toString(),
+        userId: user.id, // Pass the UUID directly
         title: _titleController.text.trim(),
         description: _descController.text.trim(),
-        // LOGIC: If homework is selected, we pass empty string for location
         locationName: _isHomework ? "" : _locController.text.trim(),
-        startTime: start,
-        endTime: end,
+        startTime: startDT,
+        endTime: endDT,
         labelName: _labelController.text.isEmpty ? "General" : _labelController.text.trim(),
-        labelColor: '#6A1B9A',
         isHomework: _isHomework,
       );
 
-      // 2. Use your Service to handle Cloud, Local DB, AND Notifications
-      // This solves the "cannot add" bug because the service handles it all!
-      await _scheduleService.insertSchedule(newSchedule);
+      // 4. Call Service (This handles Supabase + SQLite + Notifications)
+      final int? newId = await _scheduleService.insertSchedule(newSchedule);
 
-      if (mounted) {
+      if (mounted && newId != null) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Schedule saved successfully!")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Successfully added to your timetable!")),
+        );
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) {
+        // This will print the exact SQL or SQLite error for debugging
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Add Failed: $e")));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -82,87 +87,92 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Add to Timetable"),
-        backgroundColor: const Color(0xFF6A1B9A),
+        title: const Text("Add to Timetable", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF1A237E), // Matching your theme
         foregroundColor: Colors.white,
       ),
       body: _isSaving
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A)))
+          ? const Center(child: CircularProgressIndicator())
           : ListView(
         padding: const EdgeInsets.all(20.0),
         children: [
-          _buildTextField(_titleController, "Schedule Title", Icons.edit_calendar),
+          _buildTextField(_titleController, "Subject / Task Title", Icons.edit_calendar),
           const SizedBox(height: 15),
 
-          // FEATURE: Only show location field if it is NOT homework
           if (!_isHomework) ...[
             _buildTextField(_locController, "Venue / Location", Icons.location_on),
             const SizedBox(height: 15),
           ],
 
-          _buildTextField(_labelController, "Label (e.g., Exam, Class)", Icons.label_important),
+          _buildTextField(_labelController, "Category (e.g. BMIT2013, Exams)", Icons.label),
 
-          const Divider(height: 30),
+          const Divider(height: 40),
 
           SwitchListTile(
-            title: const Text("Homework Reminder", style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text("Sets a reminder 1 day before due date"),
+            title: const Text("Is this Homework?", style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text("Locations will be hidden for tasks"),
             value: _isHomework,
-            activeColor: const Color(0xFF6A1B9A),
-            onChanged: (bool value) => setState(() => _isHomework = value),
-            secondary: Icon(Icons.assignment, color: _isHomework ? const Color(0xFF6A1B9A) : Colors.grey),
+            onChanged: (val) => setState(() => _isHomework = val),
+            activeColor: const Color(0xFF1A237E),
           ),
 
-          const Divider(height: 30),
+          const SizedBox(height: 10),
 
           ListTile(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: Colors.grey)),
+            tileColor: Colors.grey[100],
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             title: Text(_isHomework ? "Due Date" : "Class Date"),
             subtitle: Text("${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}"),
-            trailing: const Icon(Icons.calendar_today, color: Color(0xFF6A1B9A)),
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime.now(),
-                lastDate: DateTime(2027),
-              );
-              if (picked != null) setState(() => _selectedDate = picked);
-            },
+            trailing: const Icon(Icons.calendar_month, color: Color(0xFF1A237E)),
+            onTap: _pickDate,
           ),
 
           const SizedBox(height: 15),
+
           Row(
             children: [
-              Expanded(child: _buildTimeTile("Start", _startTime, true)),
+              Expanded(child: _buildTimeTile("Starts", _startTime, true)),
               const SizedBox(width: 10),
-              Expanded(child: _buildTimeTile("End", _endTime, false)),
+              if (!_isHomework)
+                Expanded(child: _buildTimeTile("Ends", _endTime, false)),
             ],
           ),
 
-          const SizedBox(height: 30),
+          const SizedBox(height: 40),
+
           ElevatedButton(
             onPressed: _saveSchedule,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6A1B9A),
+              backgroundColor: const Color(0xFF1A237E),
               foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 50),
+              padding: const EdgeInsets.symmetric(vertical: 15),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text("Confirm & Save", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: const Text("Save to Timetable", style: TextStyle(fontSize: 16)),
           ),
         ],
       ),
     );
   }
 
-  // (Keeping your helper widgets exactly as they were...)
+  // --- HELPERS ---
+
+  void _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) setState(() => _selectedDate = picked);
+  }
+
   Widget _buildTimeTile(String label, TimeOfDay time, bool isStart) {
     return ListTile(
-      title: Text(label),
-      subtitle: Text(time.format(context)),
       tileColor: Colors.grey[100],
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      title: Text(label, style: const TextStyle(fontSize: 12)),
+      subtitle: Text(time.format(context), style: const TextStyle(fontWeight: FontWeight.bold)),
       onTap: () async {
         final picked = await showTimePicker(context: context, initialTime: time);
         if (picked != null) {
@@ -179,7 +189,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       controller: controller,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF6A1B9A)),
+        prefixIcon: Icon(icon, color: const Color(0xFF1A237E)),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );

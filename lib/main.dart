@@ -6,6 +6,7 @@ import 'package:app_links/app_links.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:uni_path/providers/user_provider.dart';
 import 'package:uni_path/screens/home.dart';
+import 'package:uni_path/screens/Auth/login_screen.dart'; // Make sure this import is correct
 import 'package:uni_path/screens/Events/event_details.dart';
 import 'package:uni_path/services/event_service.dart';
 import 'package:uni_path/services/user_service.dart';
@@ -16,45 +17,53 @@ import 'package:uni_path/services/schedule_service.dart';
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 
-// new line added by shouxian
-//xindongxi
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables from the bundled .env asset
-  await dotenv.load(fileName: '.env');
+  try {
+    await dotenv.load(fileName: '.env');
 
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-  );
+    await Supabase.initialize(
+      url: dotenv.env['SUPABASE_URL']!,
+      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    );
 
-  await EasyLocalization.ensureInitialized();
+    await EasyLocalization.ensureInitialized();
 
-  // --- MODULE 4 INITIALIZATION ---
-  // Initialize notifications (Timezones, Channels, and Permissions)
-  final notificationService = NotificationService();
-  await notificationService.init();
+    try {
+      final notificationService = NotificationService();
+      await notificationService.init();
+    } catch (e) {
+      // This will now catch the "Asia/Kuala Lumpur" error without hanging the app
+      debugPrint("Warning: Notifications failed to init: $e");
+    }
 
-  runApp(
-    EasyLocalization(
-      supportedLocales: const [
-        Locale('en'),
-        Locale('ms'),
-        Locale('zh'),
-        Locale('ja'),
-      ],
-      path: 'assets/translations',
-      fallbackLocale: const Locale('en'),
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => UserProvider()),
+    runApp(
+      EasyLocalization(
+        supportedLocales: const [
+          Locale('en'),
+          Locale('ms'),
+          Locale('zh'),
+          Locale('ja'),
         ],
-        child: const MainApp(),
+        path: 'assets/translations',
+        fallbackLocale: const Locale('en'),
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => UserProvider()),
+          ],
+          child: const MainApp(),
+        ),
       ),
-    ),
-  );
+    );
+  } catch (e) {
+    debugPrint("CRITICAL ERROR DURING BOOT: $e");
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(child: Text("Startup Error: $e", textAlign: TextAlign.center)),
+      ),
+    ));
+  }
 }
 
 class MainApp extends StatefulWidget {
@@ -67,6 +76,7 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
+  bool _isInitializing = true; // Added to track boot sequence
 
   @override
   void initState() {
@@ -76,26 +86,20 @@ class _MainAppState extends State<MainApp> {
   }
 
   Future<void> _initializeSession() async {
-    // Check local preferences to see if they specifically un-checked "Remember Me"
     final prefs = await SharedPreferences.getInstance();
-    final rememberMe = prefs.getBool('remember_me') ?? true; // default to true if never explicitly set
+    final rememberMe = prefs.getBool('remember_me') ?? true;
 
     if (!rememberMe) {
-      // They didn't want to be remembered across app boots. Wipe the cached Supabase token.
       await Supabase.instance.client.auth.signOut();
     } else {
-      // 1. Check for immediate session on boot
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
-        _loadUser(session.user.id);
-
-        // --- MODULE 4: BACKGROUND SYNC ---
-        // Sync local SQLite database with fresh data on app boot
+        await _loadUser(session.user.id);
         ScheduleService().getMySchedules();
       }
     }
 
-    // 2. Listen globally for token refreshes or logouts
+    // Auth state listener to handle logins/logouts in real-time
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final session = data.session;
       if (session != null) {
@@ -106,6 +110,12 @@ class _MainAppState extends State<MainApp> {
         }
       }
     });
+
+    if (mounted) {
+      setState(() {
+        _isInitializing = false; // Boot sequence finished
+      });
+    }
   }
 
   Future<void> _loadUser(String userId) async {
@@ -118,37 +128,28 @@ class _MainAppState extends State<MainApp> {
 
   void _initDeepLinks() {
     _appLinks = AppLinks();
-    
-    // Handle initial routing if app launched cold from a link
     _appLinks.getInitialLink().then((uri) {
       if (uri != null) _handleIncomingURI(uri);
     });
-
-    // Handle deep links when app is already in the background/foreground
     _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
       _handleIncomingURI(uri);
     });
   }
 
   Future<void> _handleIncomingURI(Uri uri) async {
-    // Expected link: https://unipath.com/event/<eventId>
     if (uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'event') {
       if (uri.pathSegments.length > 1) {
-        final eventIdStr = uri.pathSegments[1];
-        final eventId = int.tryParse(eventIdStr);
+        final eventId = int.tryParse(uri.pathSegments[1]);
         if (eventId != null) {
           try {
-            final eventService = EventService();
-            final matchedEvent = await eventService.getEventById(eventId);
+            final matchedEvent = await EventService().getEventById(eventId);
             if (matchedEvent != null && globalNavigatorKey.currentState != null) {
               globalNavigatorKey.currentState!.push(
-                MaterialPageRoute(
-                  builder: (_) => EventDetailScreen(event: matchedEvent),
-                ),
+                MaterialPageRoute(builder: (_) => EventDetailScreen(event: matchedEvent)),
               );
             }
           } catch (e) {
-            debugPrint("Failed to route to event from deep link: $e");
+            debugPrint("Deep link routing error: $e");
           }
         }
       }
@@ -168,17 +169,32 @@ class _MainAppState extends State<MainApp> {
       supportedLocales: context.supportedLocales,
       locale: context.locale,
       navigatorKey: globalNavigatorKey,
-      // REMOVED: scaffoldMessengerKey line (not needed for real notifications)
       debugShowCheckedModeBanner: false,
       title: 'UniPath',
       theme: ThemeData(
         useMaterial3: true,
-        primarySwatch: Colors.purple,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6A1B9A), brightness: Brightness.light),
-        scaffoldBackgroundColor: const Color(0xFFF5F7F9),
-        colorSchemeSeed: Colors.purple,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6A1B9A)),
       ),
-      home: const HomePage(),
+      home: Consumer<UserProvider>(
+        builder: (context, userProvider, _) {
+          // 1. Show spinner ONLY while the very first session check is running
+          if (_isInitializing) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
+              ),
+            );
+          }
+
+          // 2. If boot is done and user is null, they MUST log in
+          if (userProvider.currentUser == null) {
+            return const ; // Redirect to your Login Page
+          }
+
+          // 3. Otherwise, they are logged in. Show Home.
+          return const HomePage();
+        },
+      ),
     );
   }
 }

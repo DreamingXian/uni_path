@@ -12,61 +12,59 @@ class NotificationService {
 
   Future<void> init() async {
     tz.initializeTimeZones();
-    // Explicitly set to Malaysia time to match your location
-    tz.setLocalLocation(tz.getLocation('Asia/Kuala Lumpur'));
+    // Lock to Malaysia time to prevent offset errors
+    tz.setLocalLocation(tz.getLocation('Asia/Kuala_Lumpur'));
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     await _notifications.initialize(
       const InitializationSettings(android: androidInit),
     );
-    debugPrint("🚀 Notification Service Initialized");
+    debugPrint("🚀 Notification Service Ready (KL Time)");
   }
 
   Future<void> scheduleReminder({
     required int id,
     required String title,
     required DateTime startTime,
+    bool isHomework = false,
   }) async {
-    debugPrint("🔔 ATTEMPTING TO SCHEDULE: $title at $startTime");
+    // 1. Internal logic: 24h for homework, 10 mins for classes
+    final reminderTime = isHomework
+        ? startTime.subtract(const Duration(days: 1))
+        : startTime.subtract(const Duration(minutes: 10));
 
-    // 1. Calculate 10 minutes before
-    final reminderTime = startTime.subtract(const Duration(minutes: 10));
-
-    // 2. Check if the time has already passed
+    // 2. Prevent scheduling if the time has passed
     if (reminderTime.isBefore(DateTime.now())) {
-      debugPrint("❌ SKIPPED: $reminderTime is in the past compared to ${DateTime.now()}");
+      debugPrint("❌ SKIPPED: $title - Time already passed.");
       return;
     }
 
-    // 3. Request Exact Alarm Permission (Android 12+ Fix)
+    // 3. Request Permission for Android 12+
     final androidImplementation = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await androidImplementation?.requestExactAlarmsPermission();
 
-    // 4. Actually tell Android to show the notification
+    // 4. Schedule the notification
     await _notifications.zonedSchedule(
       id,
-      "Upcoming Class",
-      "Your class '$title' starts in 10 minutes!",
+      isHomework ? "Homework Due Tomorrow" : "Upcoming Class",
+      isHomework ? "Finish: $title" : "Starts in 10 mins: $title",
       tz.TZDateTime.from(reminderTime, tz.local),
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          'uni_path_reminders',
-          'Academic Reminders',
-          channelDescription: 'Reminders for your classes and homework',
+          'uni_path_academic',
+          'Academic Alerts',
           importance: Importance.max,
           priority: Priority.high,
-          showWhen: true,
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
     );
-
-    debugPrint("✅ SUCCESS: Notification registered for $reminderTime");
+    debugPrint("✅ NOTIFICATION SET: $title for $reminderTime");
   }
 
   Future<void> cancelNotification(int id) async {
     await _notifications.cancel(id);
-    debugPrint("🗑️ Notification $id cancelled");
+    debugPrint("🗑️ Notification $id removed from system.");
   }
 }

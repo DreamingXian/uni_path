@@ -1,64 +1,52 @@
 class ScheduleModel {
   final int? id;
   final String? userId;
-  final String? title;
+  final String title;
   final String? description;
   final String? locationName;
-  final double? latitude;
-  final double? longitude;
   final DateTime startTime;
-  final DateTime endTime;
-  final DateTime? createdAt;
-  // New Fields added for filtering and UI labels
-  final String? labelName;
-  final String? labelColor;
+  final DateTime? endTime;
   final bool isHomework;
+  final String? labelName;
 
   ScheduleModel({
     this.id,
     this.userId,
-    this.title,
+    required this.title,
     this.description,
     this.locationName,
-    this.latitude,
-    this.longitude,
     required this.startTime,
-    required this.endTime,
-    this.createdAt,
-    this.labelName,
-    this.labelColor,
+    this.endTime,
     this.isHomework = false,
+    this.labelName,
   });
 
-  factory ScheduleModel.fromJson(Map<String, dynamic> json) => ScheduleModel(
-    id: json['id'],
-    userId: json['user_id'],
-    title: json['title'],
-    description: json['description'],
-    locationName: json['location_name'],
-    latitude: json['latitude']?.toDouble(),
-    longitude: json['longitude']?.toDouble(),
-    startTime: DateTime.parse(json['start_time']),
-    endTime: DateTime.parse(json['end_time']),
-    createdAt: json['created_at'] != null
-        ? DateTime.parse(json['created_at'])
-        : null,
-    labelName: json['label_name'],
-    labelColor: json['label_color'],
-    isHomework: json['is_homework'] ?? false,
-  );
+  // Convert for Supabase (Cloud)
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'description': description,
+      'location_name': locationName,
+      'start_time': startTime.toUtc().toIso8601String(),
+      'end_time': endTime?.toUtc().toIso8601String(),
+      'is_homework': isHomework,
+      'label_name': labelName,
+    };
+  }
 
-  Map<String, dynamic> toMap() => {
-    'title': title,
-    'description': description,
-    'location_name': locationName,
-    'latitude': latitude,
-    'longitude': longitude,
-    'start_time': startTime.toIso8601String(),
-    'end_time': endTime.toIso8601String(),
-    'label_name': labelName,
-    'label_color': labelColor,
-    'is_homework': isHomework,
-    // user_id handled by auth.uid() default in DB
-  };
+  // Read from Supabase/SQLite
+  factory ScheduleModel.fromJson(Map<String, dynamic> json) {
+    return ScheduleModel(
+      id: json['id'] is String ? int.parse(json['id']) : json['id'],
+      userId: json['user_id'],
+      title: json['title'] ?? '',
+      description: json['description'],
+      locationName: json['location_name'],
+      startTime: DateTime.parse(json['start_time']).toLocal(),
+      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']).toLocal() : null,
+      // SQLite uses 1/0, Supabase uses true/false
+      isHomework: json['is_homework'] == 1 || json['is_homework'] == true,
+      labelName: json['label_name'],
+    );
+  }
 }
