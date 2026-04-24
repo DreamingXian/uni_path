@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../../providers/user_provider.dart';
+import '../../services/schedule_service.dart';
 import '../auth_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -184,16 +185,46 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _showDeleteDialog(BuildContext context, dynamic id) {
-    showDialog(context: context, builder: (context) => AlertDialog(
-      title: const Text("Delete Record?"),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-        TextButton(onPressed: () async {
-          await Supabase.instance.client.from('schedules').delete().eq('id', id);
-          if (mounted) Navigator.pop(context);
-        }, child: const Text("Delete", style: TextStyle(color: Colors.red))),
-      ],
-    ));
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Record?"),
+        content: const Text("This will remove the schedule and cancel any upcoming notifications."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              final int scheduleId = id is int ? id : int.parse(id.toString());
+
+              // 1. Pop the dialog immediately so the user isn't waiting
+              Navigator.pop(context);
+
+              // 2. Perform the deletion in the background
+              try {
+                await ScheduleService().deleteSchedule(scheduleId);
+
+                // 3. Optional: Show confirmation after background task finishes
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Schedule removed successfully")),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Error deleting: $e"), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildEmptyState() => const Center(child: Padding(padding: EdgeInsets.only(top: 50), child: Text("No records for this day.", style: TextStyle(color: Colors.grey))));

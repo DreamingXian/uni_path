@@ -168,6 +168,7 @@ class _MainAppState extends State<MainApp> {
       supportedLocales: context.supportedLocales,
       locale: context.locale,
       navigatorKey: globalNavigatorKey,
+      // REMOVED: scaffoldMessengerKey line (not needed for real notifications)
       debugShowCheckedModeBanner: false,
       title: 'UniPath',
       theme: ThemeData(
@@ -175,7 +176,7 @@ class _MainAppState extends State<MainApp> {
         primarySwatch: Colors.purple,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6A1B9A), brightness: Brightness.light),
         scaffoldBackgroundColor: const Color(0xFFF5F7F9),
-        colorSchemeSeed: Colors.purple, // Using seeds is cleaner in Material 3
+        colorSchemeSeed: Colors.purple,
       ),
       home: const HomePage(),
     );

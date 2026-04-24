@@ -1,40 +1,72 @@
-import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
+  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+
   Future<void> init() async {
-    debugPrint("Notification Service Initialized.");
+    tz.initializeTimeZones();
+    // Explicitly set to Malaysia time to match your location
+    tz.setLocalLocation(tz.getLocation('Asia/Kuala Lumpur'));
+
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    await _notifications.initialize(
+      const InitializationSettings(android: androidInit),
+    );
+    debugPrint("🚀 Notification Service Initialized");
   }
 
-  // FIXED: Added 'scheduleReminder' that your ScheduleService is looking for
   Future<void> scheduleReminder({
     required int id,
     required String title,
     required DateTime startTime,
   }) async {
-    final durationToWait = startTime.difference(DateTime.now());
+    debugPrint("🔔 ATTEMPTING TO SCHEDULE: $title at $startTime");
 
-    // If the time has already passed, don't set a timer
-    if (durationToWait.isNegative) {
-      debugPrint("Reminder for $title skipped: Time already passed.");
+    // 1. Calculate 10 minutes before
+    final reminderTime = startTime.subtract(const Duration(minutes: 10));
+
+    // 2. Check if the time has already passed
+    if (reminderTime.isBefore(DateTime.now())) {
+      debugPrint("❌ SKIPPED: $reminderTime is in the past compared to ${DateTime.now()}");
       return;
     }
 
-    // Standard Flutter Timer (Safe for Gradle)
-    Timer(durationToWait, () {
-      debugPrint("NOTIFICATION TRIGGERED: $title");
-      // You can add a SnackBar or Dialog logic here if you want a visual popup
-    });
+    // 3. Request Exact Alarm Permission (Android 12+ Fix)
+    final androidImplementation = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await androidImplementation?.requestExactAlarmsPermission();
 
-    debugPrint("Reminder for $title set to trigger in ${durationToWait.inMinutes} minutes.");
+    // 4. Actually tell Android to show the notification
+    await _notifications.zonedSchedule(
+      id,
+      "Upcoming Class",
+      "Your class '$title' starts in 10 minutes!",
+      tz.TZDateTime.from(reminderTime, tz.local),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'uni_path_reminders',
+          'Academic Reminders',
+          channelDescription: 'Reminders for your classes and homework',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+    );
+
+    debugPrint("✅ SUCCESS: Notification registered for $reminderTime");
   }
 
-  // FIXED: Added 'cancelNotification' that your ScheduleService is looking for
   Future<void> cancelNotification(int id) async {
-    debugPrint("Notification for ID $id has been cancelled.");
+    await _notifications.cancel(id);
+    debugPrint("🗑️ Notification $id cancelled");
   }
 }
