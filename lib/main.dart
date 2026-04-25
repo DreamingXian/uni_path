@@ -4,16 +4,18 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:uni_path/providers/user_provider.dart';
-import 'package:uni_path/screens/home.dart';
-import 'package:uni_path/screens/Auth/login_screen.dart'; // Make sure this import is correct
-import 'package:uni_path/screens/Events/event_details.dart';
-import 'package:uni_path/services/event_service.dart';
-import 'package:uni_path/services/user_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
-import 'package:uni_path/services/notification_service.dart';
-import 'package:uni_path/services/schedule_service.dart';
+
+// Internal Project Imports (Adjusted for your root folder structure)
+import 'providers/user_provider.dart';
+import 'screens/auth_screen.dart';
+import 'screens/home.dart';
+import 'screens/Events/event_details.dart';
+import 'services/event_service.dart';
+import 'services/user_service.dart';
+import 'services/notification_service.dart';
+import 'services/schedule_service.dart';
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -30,11 +32,11 @@ Future<void> main() async {
 
     await EasyLocalization.ensureInitialized();
 
+    // Notification Init (Soft catch to prevent "Asia/Kuala Lumpur" hang)
     try {
       final notificationService = NotificationService();
       await notificationService.init();
     } catch (e) {
-      // This will now catch the "Asia/Kuala Lumpur" error without hanging the app
       debugPrint("Warning: Notifications failed to init: $e");
     }
 
@@ -76,7 +78,7 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
-  bool _isInitializing = true; // Added to track boot sequence
+  bool _isInitializing = true; // Prevents the app from showing Home prematurely
 
   @override
   void initState() {
@@ -95,11 +97,12 @@ class _MainAppState extends State<MainApp> {
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         await _loadUser(session.user.id);
+        // Background sync for offline DB
         ScheduleService().getMySchedules();
       }
     }
 
-    // Auth state listener to handle logins/logouts in real-time
+    // Listen for Auth changes (Login/Logout)
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final session = data.session;
       if (session != null) {
@@ -112,9 +115,7 @@ class _MainAppState extends State<MainApp> {
     });
 
     if (mounted) {
-      setState(() {
-        _isInitializing = false; // Boot sequence finished
-      });
+      setState(() => _isInitializing = false);
     }
   }
 
@@ -149,7 +150,7 @@ class _MainAppState extends State<MainApp> {
               );
             }
           } catch (e) {
-            debugPrint("Deep link routing error: $e");
+            debugPrint("Deep link error: $e");
           }
         }
       }
@@ -177,21 +178,19 @@ class _MainAppState extends State<MainApp> {
       ),
       home: Consumer<UserProvider>(
         builder: (context, userProvider, _) {
-          // 1. Show spinner ONLY while the very first session check is running
+          // Show spinner while checking the session
           if (_isInitializing) {
             return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
-              ),
+              body: Center(child: CircularProgressIndicator(color: Color(0xFF6A1B9A))),
             );
           }
 
-          // 2. If boot is done and user is null, they MUST log in
+          // If no user is logged in, show Auth Screen
           if (userProvider.currentUser == null) {
-            return const ; // Redirect to your Login Page
+            return const AuthScreen(showLogin: true);
           }
 
-          // 3. Otherwise, they are logged in. Show Home.
+          // If logged in, show Home Page
           return const HomePage();
         },
       ),
