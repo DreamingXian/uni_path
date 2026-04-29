@@ -23,6 +23,7 @@ class ScheduleService {
   // --- FETCH OPERATIONS ---
   Future<List<ScheduleModel>> getMySchedules() async {
     try {
+      // 1. Try Live Data
       final response = await _supabase
           .from('schedules')
           .select()
@@ -30,13 +31,16 @@ class ScheduleService {
 
       final list = (response as List).map((json) => ScheduleModel.fromJson(json)).toList();
 
-      // Refresh local cache with latest data
+      // 2. BACKGROUND SYNC: Update the SQLite mirror
       await _localDB.cacheData(response.cast<Map<String, dynamic>>());
 
       return list;
     } catch (e) {
-      log('⚠️ Offline mode: Fetching from local SQLite.');
+      // 3. OFFLINE FALLBACK: This prevents the 'SocketException' from showing on the screen
+      log('⚠️ Network down. Switching to Offline Mode.');
       final localData = await _localDB.fetchOfflineSchedules();
+
+      // Return the cached data so the user sees their classes
       return localData.map((json) => ScheduleModel.fromJson(json)).toList();
     }
   }
@@ -45,10 +49,13 @@ class ScheduleService {
   Future<int?> insertSchedule(ScheduleModel schedule) async {
     try {
       final Map<String, dynamic> data = schedule.toMap();
+      // Remove ID if it's null to let Supabase generate it
+      data.remove('id');
+
       final response = await _supabase.from('schedules').insert(data).select().single();
       final int newId = response['id'];
 
-      // 1. Save to local SQLite
+      // 1. Save to local SQLite for offline persistence
       await _localDB.saveLocally({
         'id': newId.toString(),
         'user_id': schedule.userId,
@@ -61,12 +68,12 @@ class ScheduleService {
         'is_homework': schedule.isHomework ? 1 : 0,
       });
 
-      // 2. NEW: Calculate and insert the database reminder record
+      // 2. Calculate and insert the database reminder record
       final reminderTime = schedule.isHomework
           ? schedule.startTime.subtract(const Duration(days: 1))
           : schedule.startTime.subtract(const Duration(minutes: 10));
 
-      await insertReminder(newId, reminderTime); // <--- ADD THIS LINE
+      await insertReminder(newId, reminderTime);
 
       // 3. Handle physical phone notification
       _handleNotificationLogic(newId, response);
@@ -92,18 +99,29 @@ class ScheduleService {
           : schedule.startTime.subtract(const Duration(minutes: 10));
 
       // 2. Update the reminders table in Supabase
-      await _supabase
-          .from('reminders')
-          .update({'remind_at': reminderTime.toIso8601String()})
-          .eq('schedule_id', schedule.id!);
+      try {
+        await _supabase
+            .from('reminders')
+            .update({'remind_at': reminderTime.toIso8601String()})
+            .eq('schedule_id', schedule.id!);
+      } catch (re) {
+        log('⚠️ Reminder table update failed: $re');
+      }
 
       // 3. Update the local SQLite cache
       await _localDB.saveLocally({
         'id': schedule.id.toString(),
-        // ... rest of your mapping logic ...
+        'user_id': schedule.userId,
+        'title': schedule.title,
+        'description': schedule.description,
+        'location_name': schedule.locationName,
+        'start_time': schedule.startTime.toIso8601String(),
+        'end_time': schedule.endTime?.toIso8601String(),
+        'label_name': schedule.labelName,
+        'is_homework': schedule.isHomework ? 1 : 0,
       });
 
-      // 4. Update the physical phone alarm (this overwrites the old one)
+      // 4. Update the physical phone alarm
       _handleNotificationLogic(schedule.id!, updateData);
 
     } catch (e) {
@@ -112,10 +130,14 @@ class ScheduleService {
     }
   }
 
+  // --- DELETE OPERATION ---
   Future<void> deleteSchedule(int scheduleId) async {
     try {
+      // Delete from cloud
       await _supabase.from('schedules').delete().eq('id', scheduleId);
+      // Delete from local cache
       await _localDB.deleteLocally(scheduleId.toString());
+      // Cancel the scheduled phone notification
       await _notifications.cancelNotification(scheduleId);
     } catch (e) {
       log('❌ Delete error: $e');
@@ -123,6 +145,7 @@ class ScheduleService {
     }
   }
 
+  // --- REMINDER HELPER ---
   Future<void> insertReminder(int scheduleId, DateTime remindAt) async {
     try {
       await _supabase.from('reminders').insert({
@@ -130,23 +153,22 @@ class ScheduleService {
         'remind_at': remindAt.toIso8601String(),
       });
     } catch (e) {
-      debugPrint("Database Reminder Error: $e");
+      log('⚠️ Database Reminder Error: $e');
     }
   }
 
+  // --- NOTIFICATION LOGIC ---
   void _handleNotificationLogic(int id, Map<String, dynamic> data) {
     if (data['start_time'] == null) return;
 
-    // Use a strict parser to ensure the notification doesn't fire 8 hours late/early
-    DateTime startTime;
     String rawDate = data['start_time'].toString();
 
-    // Force UTC if the indicator is missing
+    // Ensure ISO8601 format for parsing
     if (!rawDate.endsWith('Z') && !rawDate.contains('+')) {
       rawDate = "${rawDate.replaceFirst(' ', 'T')}Z";
     }
 
-    startTime = DateTime.parse(rawDate).toLocal();
+    DateTime startTime = DateTime.parse(rawDate).toLocal();
 
     _notifications.scheduleReminder(
       id: id,

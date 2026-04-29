@@ -54,10 +54,10 @@ class ScheduleModel {
       endTime: json['end_time'] != null ? DateTime.parse(json['end_time']) : null,
       labelName: json['label_name'],
       isHomework: json['is_homework'] == 1 || json['is_homework'] == true,
-      isRepeating: json['is_repeating'] ?? false,
       repeatDays: json['repeat_days'] != null
-          ? List<int>.from(json['repeat_days'])
-          : null,
+          ? List<int>.from(json['repeat_days'].map((x) => int.parse(x.toString())))
+          : [],
+      isRepeating: json['is_repeating'] == true || json['is_repeating'] == 1,
     );
   }
 }

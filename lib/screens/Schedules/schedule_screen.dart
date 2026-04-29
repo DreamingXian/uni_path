@@ -6,6 +6,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../../services/schedule_service.dart';
 import '../auth_screen.dart';
 import 'edit_schedule_screen.dart';
+import '../../models/schedule_model.dart';
 
 class ScheduleScreen extends StatefulWidget {
   final Function(DateTime)? onDateChanged;
@@ -23,6 +24,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   DateTime? _selectedDay = DateTime.now();
   final _scheduleService = ScheduleService();
 
+  // Using int as the key for deleting status
   final Set<int> _deletingIds = {};
 
   @override
@@ -42,6 +44,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     super.dispose();
   }
 
+  void _refresh() => setState(() {});
+
   @override
   Widget build(BuildContext context) {
     final userId = Supabase.instance.client.auth.currentUser?.id;
@@ -51,6 +55,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         title: const Text("Weekly Timetable"),
         backgroundColor: const Color(0xFF1A237E),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.sync),
+            onPressed: _refresh,
+          )
+        ],
       ),
       body: Column(
         children: [
@@ -74,61 +84,62 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           Expanded(
             child: userId == null
                 ? _buildGuestPlaceholder()
-                : StreamBuilder<List<Map<String, dynamic>>>(
-              stream: Supabase.instance.client
-                  .from('schedules')
-                  .stream(primaryKey: ['id'])
-                  .eq('user_id', userId),
+                : FutureBuilder<List<ScheduleModel>>(
+              future: _scheduleService.getMySchedules(),
               builder: (context, snapshot) {
-                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                // --- REPEATING LOGIC FILTER ---
-                final dayRecords = snapshot.data!.where((item) {
-                  final id = item['id'] is int ? item['id'] : int.parse(item['id'].toString());
-                  final isNotDeleted = !_deletingIds.contains(id);
+                // Catch potential formatting errors in the model mapping
+                if (snapshot.hasError) {
+                  return Center(child: Text("Data Error: ${snapshot.error}"));
+                }
 
-                  // 1. Check for one-time specific date matches
-                  final startTime = DateTime.parse(item['start_time']);
-                  bool matchesDate = isSameDay(startTime, _selectedDay);
+                final allSchedules = snapshot.data ?? [];
 
-                  // 2. Check for repeating weekday matches
+                // --- FILTERING LOGIC ---
+                final dayRecords = allSchedules.where((item) {
+                  if (item.id == null) return false;
+                  final isNotDeleted = !_deletingIds.contains(item.id);
+
+                  // 1. Check for one-time date match
+                  bool matchesDate = isSameDay(item.startTime, _selectedDay);
+
+                  // 2. Check for repeating weekday match
                   bool matchesRepeating = false;
-                  if (item['is_repeating'] == true && item['repeat_days'] != null) {
-                    final List<dynamic> repeatDays = item['repeat_days'];
-                    if (repeatDays.contains(_selectedDay!.weekday)) {
-                      matchesRepeating = true;
-                    }
+                  if (item.isRepeating && (item.repeatDays as List).map((e) => int.parse(e.toString())).toList().contains(_selectedDay!.weekday)) {
+                    matchesRepeating = true;
                   }
 
                   return (matchesDate || matchesRepeating) && isNotDeleted;
                 }).toList();
 
                 // Sort by time
-                dayRecords.sort((a, b) {
-                  final timeA = TimeOfDay.fromDateTime(DateTime.parse(a['start_time']));
-                  final timeB = TimeOfDay.fromDateTime(DateTime.parse(b['start_time']));
-                  if (timeA.hour != timeB.hour) return timeA.hour.compareTo(timeB.hour);
-                  return timeA.minute.compareTo(timeB.minute);
-                });
+                dayRecords.sort((a, b) => a.startTime.compareTo(b.startTime));
 
-                if (dayRecords.isEmpty) return const Center(child: Text("No activities scheduled."));
+                if (dayRecords.isEmpty) {
+                  return const Center(child: Text("No activities scheduled for today."));
+                }
 
-                final classes = dayRecords.where((i) => i['is_homework'] == false).toList();
-                final homework = dayRecords.where((i) => i['is_homework'] == true).toList();
+                final classes = dayRecords.where((i) => !i.isHomework).toList();
+                final homework = dayRecords.where((i) => i.isHomework).toList();
 
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    if (classes.isNotEmpty) ...[
-                      _buildHeader("Academic Classes", Icons.school),
-                      ...classes.map((i) => _buildScheduleCard(context, i))
+                return RefreshIndicator(
+                  onRefresh: () async => _refresh(),
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      if (classes.isNotEmpty) ...[
+                        _buildHeader("Academic Classes", Icons.school),
+                        ...classes.map((i) => _buildScheduleCard(context, i))
+                      ],
+                      if (homework.isNotEmpty) ...[
+                        _buildHeader("Homework & Tasks", Icons.assignment),
+                        ...homework.map((i) => _buildScheduleCard(context, i))
+                      ],
                     ],
-                    if (homework.isNotEmpty) ...[
-                      _buildHeader("Homework & Tasks", Icons.assignment),
-                      ...homework.map((i) => _buildScheduleCard(context, i))
-                    ],
-                  ],
+                  ),
                 );
               },
             ),
@@ -138,7 +149,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  // --- UI HELPERS ---
+  // --- UI COMPONENTS ---
+
   Widget _buildHeader(String title, IconData icon) => Padding(
     padding: const EdgeInsets.only(top: 20, bottom: 8),
     child: Row(
@@ -150,25 +162,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     ),
   );
 
-  Widget _buildScheduleCard(BuildContext context, Map<String, dynamic> item) {
-    final start = DateTime.parse(item['start_time']);
-    final end = item['end_time'] != null ? DateTime.parse(item['end_time']) : null;
-
+  Widget _buildScheduleCard(BuildContext context, ScheduleModel item) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        // leading icon removed as requested
-        title: Text(item['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              ScheduleService.formatTimeRange(start, end),
+              ScheduleService.formatTimeRange(item.startTime, item.endTime),
               style: const TextStyle(color: Color(0xFF6A1B9A), fontWeight: FontWeight.w600),
             ),
-            if (item['description'] != null && item['description'].toString().isNotEmpty)
-              Text(item['description'], style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            if (item.description != null && item.description!.isNotEmpty)
+              Text(
+                item.description!,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
           ],
         ),
         trailing: Row(
@@ -176,8 +187,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           children: [
             IconButton(
               icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey, size: 20),
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => EditScheduleScreen(item: item)));
+              onPressed: () async {
+                // Converting back to JSON for the Edit screen's requirement
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => EditScheduleScreen(item: item.toMap()))
+                );
+                _refresh();
               },
             ),
             IconButton(
@@ -190,26 +206,30 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  void _confirmDelete(BuildContext context, Map<String, dynamic> item) {
+  void _confirmDelete(BuildContext context, ScheduleModel item) {
+    if (item.id == null) return;
+
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text("Confirm Delete"),
-        content: Text("Delete '${item['title']}'?"),
+        content: Text("Delete '${item.title}'?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              final int id = item['id'] is int ? item['id'] : int.parse(item['id'].toString());
               Navigator.pop(dialogContext);
-              setState(() => _deletingIds.add(id));
+              setState(() => _deletingIds.add(item.id!));
               try {
-                await _scheduleService.deleteSchedule(id);
+                await _scheduleService.deleteSchedule(item.id!);
+                _refresh();
               } catch (e) {
                 if (mounted) {
-                  setState(() => _deletingIds.remove(id));
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Delete failed: $e")));
+                  setState(() => _deletingIds.remove(item.id!));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Delete failed: $e"))
+                  );
                 }
               }
             },
