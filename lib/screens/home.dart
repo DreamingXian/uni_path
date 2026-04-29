@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:url_launcher/url_launcher.dart';
-
 import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
 import '../services/payment_dashboard_service.dart';
 import '../services/sensor_service.dart';
-
 import 'Events/create_event.dart';
 import 'Events/payment_approval_dashboard.dart';
 import 'Events/my_tickets.dart';
@@ -17,7 +15,7 @@ import 'Events/events_screen.dart';
 import 'Events/scan_qr_nfc.dart';
 import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
-import 'Schedules/create_schedule_screen.dart'; // [MEMBER 3 ADDITION]
+import 'Schedules/create_schedule_screen.dart';
 import 'Profiles/profile_screen.dart';
 import 'Profiles/saved_posts_screen.dart';
 import 'Posts/create_post_screen.dart';
@@ -79,9 +77,6 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
-    // Stop listening to sensors when app is closed to save battery
-    final sensorService = Provider.of<SensorService>(context, listen: false);
-    sensorService.dispose();
     super.dispose();
   }
 
@@ -267,9 +262,7 @@ class _HomePageState extends State<HomePage> {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-        ).then((value) {
-          // We will add logic here later to refresh the feed if value == true
-        });
+        );
         break;
 
       case 1: // Events Module
@@ -287,7 +280,7 @@ class _HomePageState extends State<HomePage> {
         }
         break;
 
-      case 2: // [MEMBER 3 ADDITION: SCHEDULES & REMINDERS]
+      case 2:
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => CreateScheduleScreen(initialDate: _selectedScheduleDate)),
@@ -348,14 +341,14 @@ class _HomePageState extends State<HomePage> {
             width: double.infinity,
             padding: const EdgeInsets.only(top: 60, left: 20, bottom: 20, right: 20),
             decoration: const BoxDecoration(
-              color: Color(0xFF6A1B9A), // Your Vibrant Purple
+              color: Color(0xFF6A1B9A),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. The Avatar
+                // 1. Avatar
                 CircleAvatar(
-                  radius: 35, // Size control
+                  radius: 35,
                   backgroundColor: Colors.white,
                   backgroundImage: (isLoggedIn && user.avatarUrl != null)
                       ? NetworkImage(user.avatarUrl!)
@@ -365,9 +358,9 @@ class _HomePageState extends State<HomePage> {
                       : const Icon(Icons.person, color: Color(0xFF6A1B9A), size: 40),
                 ),
 
-                const SizedBox(height: 15), // Precise spacing to prevent overlap
+                const SizedBox(height: 15),
 
-                // 2. The Name
+                // 2. Name
                 Text(
                   isLoggedIn ? user.fullName : 'guest_student'.tr(),
                   style: const TextStyle(
@@ -377,7 +370,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
 
-                // 3. The Email/ID
+                // 3. Email/ID
                 if (isLoggedIn) ...[
                   const SizedBox(height: 4),
                   Text(
