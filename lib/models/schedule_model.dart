@@ -9,6 +9,10 @@ class ScheduleModel {
   final bool isHomework;
   final String? labelName;
 
+  // --- NEW FIELDS FOR WEEKLY REPEATING ---
+  final bool isRepeating;
+  final List<int>? repeatDays;
+
   ScheduleModel({
     this.id,
     this.userId,
@@ -19,22 +23,26 @@ class ScheduleModel {
     this.endTime,
     this.isHomework = false,
     this.labelName,
+    this.isRepeating = false,
+    this.repeatDays,
   });
 
-  // Convert for Supabase (Cloud)
   Map<String, dynamic> toMap() {
     return {
+      'user_id': userId,
       'title': title,
       'description': description,
       'location_name': locationName,
-      'start_time': startTime.toUtc().toIso8601String(),
-      'end_time': endTime?.toUtc().toIso8601String(),
+      'start_time': startTime.toIso8601String(),
+      'end_time': endTime?.toIso8601String(),
       'is_homework': isHomework,
       'label_name': labelName,
+      // --- MAP NEW FIELDS TO DATABASE COLUMNS ---
+      'is_repeating': isRepeating,
+      'repeat_days': repeatDays,
     };
   }
 
-  // Read from Supabase/SQLite
   factory ScheduleModel.fromJson(Map<String, dynamic> json) {
     return ScheduleModel(
       id: json['id'] is String ? int.parse(json['id']) : json['id'],
@@ -42,11 +50,14 @@ class ScheduleModel {
       title: json['title'] ?? '',
       description: json['description'],
       locationName: json['location_name'],
-      startTime: DateTime.parse(json['start_time']).toLocal(),
-      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']).toLocal() : null,
-      // SQLite uses 1/0, Supabase uses true/false
-      isHomework: json['is_homework'] == 1 || json['is_homework'] == true,
+      startTime: DateTime.parse(json['start_time']),
+      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']) : null,
       labelName: json['label_name'],
+      isHomework: json['is_homework'] == 1 || json['is_homework'] == true,
+      isRepeating: json['is_repeating'] ?? false,
+      repeatDays: json['repeat_days'] != null
+          ? List<int>.from(json['repeat_days'])
+          : null,
     );
   }
 }

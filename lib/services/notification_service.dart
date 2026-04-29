@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz_init;
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -11,7 +11,7 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
-    tz.initializeTimeZones();
+    tz_init.initializeTimeZones();
     // Lock to Malaysia time to prevent offset errors
     tz.setLocalLocation(tz.getLocation('Asia/Kuala_Lumpur'));
 
@@ -20,6 +20,23 @@ class NotificationService {
       const InitializationSettings(android: androidInit),
     );
     debugPrint("🚀 Notification Service Ready (KL Time)");
+
+    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+    // FORCE CREATE THE CHANNEL MANUALLY
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'uni_path_academic_v5',
+        'Academic Alerts',
+        description: 'Important reminders for classes and deadlines',
+        importance: Importance.max,
+        playSound: true, // Fixed: Standard property for playing sound
+        showBadge: true,
+        enableVibration: true,
+      ),
+    );
+
+    debugPrint("🚀 Notification Channel v5 Created");
   }
 
   Future<void> scheduleReminder({
@@ -28,7 +45,7 @@ class NotificationService {
     required DateTime startTime,
     bool isHomework = false,
   }) async {
-    // 1. Internal logic: 24h for homework, 10 mins for classes
+    // 1. Logic: 24h for homework, 10 mins for classes
     final reminderTime = isHomework
         ? startTime.subtract(const Duration(days: 1))
         : startTime.subtract(const Duration(minutes: 10));
@@ -39,27 +56,34 @@ class NotificationService {
       return;
     }
 
-    // 3. Request Permission for Android 12+
+    // 3. Request Permission (Crucial for Android 13/14)
     final androidImplementation = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await androidImplementation?.requestExactAlarmsPermission();
 
-    // 4. Schedule the notification
+    // 4. THE UPDATED SCHEDULE BLOCK
     await _notifications.zonedSchedule(
       id,
       isHomework ? "Homework Due Tomorrow" : "Upcoming Class",
       isHomework ? "Finish: $title" : "Starts in 10 mins: $title",
       tz.TZDateTime.from(reminderTime, tz.local),
-      const NotificationDetails(
+      NotificationDetails(
         android: AndroidNotificationDetails(
-          'uni_path_academic',
+          'uni_path_academic_v5',
           'Academic Alerts',
+          channelDescription: 'Important reminders for classes and deadlines',
           importance: Importance.max,
           priority: Priority.high,
+          fullScreenIntent: true, // Wakes up the screen
+          category: AndroidNotificationCategory.alarm,
+          visibility: NotificationVisibility.public, // Shows content on lock screen
+          audioAttributesUsage: AudioAttributesUsage.alarm,
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      payload: 'academic_reminder',
     );
+
     debugPrint("✅ NOTIFICATION SET: $title for $reminderTime");
   }
 

@@ -1,41 +1,56 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import 'package:light_sensor/light_sensor.dart';
+import 'package:sound_mode/sound_mode.dart';
+import 'package:sound_mode/utils/ringer_mode_statuses.dart';
+import 'package:sound_mode/permission_handler.dart';
 
-class SensorService {
-  StreamSubscription? _lightSub;
+class SensorService with ChangeNotifier {
   StreamSubscription? _accelSub;
   bool isStudyModeActive = false;
 
-  void initStudyMode() {
-    // 1. Light Sensor: Detect face-down or pocket (Lux < 5)
-    _lightSub = LightSensor.luxStream().listen((int lux) {
-      if (lux < 5 && !isStudyModeActive) {
-        _activateHapticFeedback();
-        isStudyModeActive = true;
-        print("Study Mode: Active (Darkness detected)");
-      } else if (lux >= 5) {
-        isStudyModeActive = false;
-      }
-    });
+  void initStudyMode() async {
+    // 1. Check for DND access without blocking initialization
+    bool? isGranted = await PermissionHandler.permissionsGranted;
 
-    // 2. Accelerometer: Detect if phone is steady (Stationary)
-    _accelSub = accelerometerEvents.listen((AccelerometerEvent event) {
-      // Logic: minimal movement on X and Y axes
-      if (event.x.abs() < 0.2 && event.y.abs() < 0.2) {
-        // Phone is stationary on a surface
+    if (isGranted != true) {
+      debugPrint("⚠️ SensorService: DND Permission missing. Skipping Hardware Mute.");
+      return;
+    }
+
+    // 2. Start the Hardware Listener
+    _accelSub = accelerometerEventStream().listen((AccelerometerEvent event) async {
+      // Detection: Face-down (Z < -8.5) and flat (X/Y near 0)
+      bool faceDown = event.z < -8.5;
+      bool stationary = event.x.abs() < 1.0 && event.y.abs() < 1.0;
+      bool newState = faceDown && stationary;
+
+      if (newState != isStudyModeActive) {
+        isStudyModeActive = newState;
+        notifyListeners();
+
+        try {
+          if (isStudyModeActive) {
+            await SoundMode.setSoundMode(RingerModeStatus.silent);
+            HapticFeedback.heavyImpact();
+            debugPrint("UniPath: Hardware Lock Active");
+          } else {
+            await SoundMode.setSoundMode(RingerModeStatus.normal);
+            debugPrint("UniPath: Hardware Lock Released");
+          }
+        } catch (e) {
+          debugPrint("Hardware Permission Error: $e");
+        }
       }
-    });
+    }, onError: (error) => debugPrint("Sensor Error: $error"));
   }
 
-  void _activateHapticFeedback() {
-    // Member 3 Extra Effort: Haptic Engine pattern
-    HapticFeedback.heavyImpact();
-  }
-
+  @override
   void dispose() {
-    _lightSub?.cancel();
     _accelSub?.cancel();
+    // Try to restore sound mode on dispose if active
+    SoundMode.setSoundMode(RingerModeStatus.normal);
+    super.dispose();
   }
 }

@@ -13,12 +13,15 @@ class EditScheduleScreen extends StatefulWidget {
 }
 
 class _EditScheduleScreenState extends State<EditScheduleScreen> {
-  // 1. Controllers initialized with existing data
   late TextEditingController _titleController;
   late TextEditingController _locationController;
   late TextEditingController _descriptionController;
 
   late bool _isHomework;
+  late bool _isRepeating;
+  late List<bool> _selectedDays;
+  final List<String> _weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
@@ -29,7 +32,17 @@ class _EditScheduleScreenState extends State<EditScheduleScreen> {
     _titleController = TextEditingController(text: widget.item['title']);
     _locationController = TextEditingController(text: widget.item['location_name'] ?? "");
     _descriptionController = TextEditingController(text: widget.item['description'] ?? "");
+
     _isHomework = widget.item['is_homework'] ?? false;
+    _isRepeating = widget.item['is_repeating'] ?? false;
+
+    _selectedDays = List.generate(7, (index) {
+      if (widget.item['repeat_days'] != null) {
+        final List<dynamic> days = widget.item['repeat_days'];
+        return days.contains(index + 1);
+      }
+      return false;
+    });
   }
 
   @override
@@ -40,80 +53,34 @@ class _EditScheduleScreenState extends State<EditScheduleScreen> {
     super.dispose();
   }
 
-  // --- Date & Time Pickers ---
-
-  Future<void> _pickDate() async {
-    final DateTime originalDate = DateTime.parse(widget.item['start_time']).toLocal();
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? originalDate,
-      firstDate: DateTime(2024),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null) setState(() => _selectedDate = picked);
-  }
-
-  Future<void> _pickStartTime() async {
-    final DateTime originalDate = DateTime.parse(widget.item['start_time']).toLocal();
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: _startTime ?? TimeOfDay.fromDateTime(originalDate),
-    );
-    if (picked != null) setState(() => _startTime = picked);
-  }
-
-  Future<void> _pickEndTime() async {
-    TimeOfDay initial;
-    if (widget.item['end_time'] != null) {
-      initial = TimeOfDay.fromDateTime(DateTime.parse(widget.item['end_time']).toLocal());
-    } else {
-      initial = TimeOfDay.fromDateTime(
-          DateTime.parse(widget.item['start_time']).toLocal().add(const Duration(hours: 1))
-      );
-    }
-
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: _endTime ?? initial,
-    );
-    if (picked != null) setState(() => _endTime = picked);
-  }
-
-  // --- The Core Update Logic ---
-
   Future<void> _updateSchedule() async {
     try {
       final originalStart = DateTime.parse(widget.item['start_time']).toLocal();
-
-      // Resolve Final Date/Times
       final DateTime finalDate = _selectedDate ?? originalStart;
       final TimeOfDay startT = _startTime ?? TimeOfDay.fromDateTime(originalStart);
-
-      final DateTime finalStartDateTime = DateTime(
-        finalDate.year, finalDate.month, finalDate.day, startT.hour, startT.minute,
-      );
-
-      // Validation: Classes require an End Time, Homework does not.
-      if (!_isHomework && _endTime == null && widget.item['end_time'] == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Classes require an End Time"), backgroundColor: Colors.red),
-        );
-        return;
-      }
+      final DateTime finalStartDateTime = DateTime(finalDate.year, finalDate.month, finalDate.day, startT.hour, startT.minute);
 
       DateTime? finalEndDateTime;
-      if (_endTime != null || widget.item['end_time'] != null) {
-        final TimeOfDay endT = _endTime ?? TimeOfDay.fromDateTime(
-            widget.item['end_time'] != null
-                ? DateTime.parse(widget.item['end_time']).toLocal()
-                : originalStart.add(const Duration(hours: 1))
-        );
-        finalEndDateTime = DateTime(
-          finalDate.year, finalDate.month, finalDate.day, endT.hour, endT.minute,
-        );
+
+      // If it's NOT homework, we handle the end time as usual
+      if (!_isHomework) {
+        if (_endTime != null) {
+          finalEndDateTime = DateTime(finalDate.year, finalDate.month, finalDate.day, _endTime!.hour, _endTime!.minute);
+        } else if (widget.item['end_time'] != null) {
+          final DateTime originalEnd = DateTime.parse(widget.item['end_time']).toLocal();
+          finalEndDateTime = DateTime(finalDate.year, finalDate.month, finalDate.day, originalEnd.hour, originalEnd.minute);
+        }
+      }
+      // If it IS homework, finalEndDateTime stays null unless you explicitly want one.
+
+      List<int>? finalRepeatDays;
+      if (_isRepeating && !_isHomework) {
+        finalRepeatDays = [];
+        for (int i = 0; i < _selectedDays.length; i++) {
+          if (_selectedDays[i]) finalRepeatDays.add(i + 1);
+        }
       }
 
-      // Prepare Model
       final updatedSchedule = ScheduleModel(
         id: widget.item['id'] is int ? widget.item['id'] : int.parse(widget.item['id'].toString()),
         userId: widget.item['user_id'],
@@ -124,21 +91,18 @@ class _EditScheduleScreenState extends State<EditScheduleScreen> {
         startTime: finalStartDateTime,
         endTime: finalEndDateTime,
         labelName: widget.item['label_name'],
+        isRepeating: _isHomework ? false : _isRepeating,
+        repeatDays: finalRepeatDays,
       );
 
-      // Execute Sync via Service
       await ScheduleService().updateSchedule(updatedSchedule);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Schedule updated and notification reset")),
-        );
-        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Updated successfully")));
+        Navigator.pop(context, true);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
@@ -149,57 +113,120 @@ class _EditScheduleScreenState extends State<EditScheduleScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text("Edit Schedule"),
         backgroundColor: const Color(0xFF1A237E),
         foregroundColor: Colors.white,
-        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
             _buildTextField(_titleController, "Title", Icons.title),
-            const SizedBox(height: 20),
-            _buildTextField(_locationController, "Location", Icons.location_on_outlined),
-            const SizedBox(height: 20),
-            _buildTextField(_descriptionController, "Description", Icons.description_outlined, maxLines: 3),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Divider(),
-            ),
-
-            _buildPickerTile(
-              icon: Icons.calendar_today,
-              title: "Date",
-              subtitle: DateFormat('EEEE, MMM d, yyyy').format(_selectedDate ?? originalStart),
-              onTap: _pickDate,
-            ),
-            const SizedBox(height: 12),
-            _buildPickerTile(
-              icon: Icons.access_time,
-              title: "Start Time",
-              subtitle: _startTime?.format(context) ?? DateFormat('h:mm a').format(originalStart),
-              onTap: _pickStartTime,
-            ),
-            const SizedBox(height: 12),
-            _buildPickerTile(
-              icon: Icons.timer_off_outlined,
-              title: _isHomework ? "End Time (Optional)" : "End Time (Required *)",
-              subtitle: _endTime?.format(context) ?? (originalEnd != null ? DateFormat('h:mm a').format(originalEnd) : "Not set"),
-              onTap: _pickEndTime,
-            ),
-
             const SizedBox(height: 15),
+            _buildTextField(_locationController, "Location", Icons.location_on_outlined),
+            const SizedBox(height: 15),
+            _buildTextField(_descriptionController, "Description", Icons.description_outlined, maxLines: 3),
+
+            const Divider(height: 30),
+
+            // Homework Toggle
             SwitchListTile(
-              title: const Text("Categorize as Homework?", style: TextStyle(fontWeight: FontWeight.w500)),
-              subtitle: const Text("Sets reminder to 24h before"),
+              title: const Text("Is this Homework?", style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text("Deadlines and one-time tasks"),
               value: _isHomework,
+              onChanged: (val) => setState(() {
+                _isHomework = val;
+                if (val) _isRepeating = false;
+              }),
               activeColor: const Color(0xFF6A1B9A),
-              onChanged: (val) => setState(() => _isHomework = val),
             ),
-            const SizedBox(height: 30),
+
+            // Weekly Repeating Section (Hides if Homework is selected)
+            if (!_isHomework) ...[
+              const Divider(),
+              SwitchListTile(
+                title: const Text("Weekly Repeating?", style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(_isRepeating ? "Recurs every week" : "One-time class/event"),
+                value: _isRepeating,
+                onChanged: (val) => setState(() {
+                  _isRepeating = val;
+                  if (val && !_selectedDays.contains(true)) {
+                    _selectedDays[DateTime.now().weekday - 1] = true;
+                  }
+                }),
+                activeColor: const Color(0xFF6A1B9A),
+              ),
+
+              if (_isRepeating) ...[
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ToggleButtons(
+                    isSelected: _selectedDays,
+                    onPressed: (index) => setState(() => _selectedDays[index] = !_selectedDays[index]),
+                    borderRadius: BorderRadius.circular(10),
+                    selectedColor: Colors.white,
+                    fillColor: const Color(0xFF6A1B9A),
+                    constraints: const BoxConstraints(minWidth: 45, minHeight: 40),
+                    children: _weekDays.map((day) => Text(day, style: const TextStyle(fontSize: 12))).toList(),
+                  ),
+                ),
+              ],
+            ],
+
+            const Divider(height: 40),
+
+            if (!_isRepeating) ...[
+              _buildPickerTile(
+                icon: Icons.calendar_today,
+                title: "Date",
+                subtitle: DateFormat('EEEE, MMM d, yyyy').format(_selectedDate ?? originalStart),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate ?? originalStart,
+                    firstDate: DateTime(2024),
+                    lastDate: DateTime(2030),
+                  );
+                  if (picked != null) setState(() => _selectedDate = picked);
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            Row(
+              children: [
+                Expanded(
+                  child: _buildPickerTile(
+                    icon: Icons.access_time,
+                    title: _isHomework ? "Due Time" : "Starts",
+                    subtitle: _startTime?.format(context) ?? DateFormat('h:mm a').format(originalStart),
+                    onTap: () async {
+                      final picked = await showTimePicker(context: context, initialTime: _startTime ?? TimeOfDay.fromDateTime(originalStart));
+                      if (picked != null) setState(() => _startTime = picked);
+                    },
+                  ),
+                ),
+                // Only show "Ends" if it's NOT homework
+                if (!_isHomework) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildPickerTile(
+                      icon: Icons.timer_off_outlined,
+                      title: "Ends",
+                      subtitle: _endTime?.format(context) ?? (originalEnd != null ? DateFormat('h:mm a').format(originalEnd) : "Not set"),
+                      onTap: () async {
+                        final picked = await showTimePicker(context: context, initialTime: _endTime ?? TimeOfDay.fromDateTime(originalEnd ?? originalStart.add(const Duration(hours: 1))));
+                        if (picked != null) setState(() => _endTime = picked);
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+
+            const SizedBox(height: 40),
             ElevatedButton(
               onPressed: _updateSchedule,
               style: ElevatedButton.styleFrom(
@@ -224,6 +251,8 @@ class _EditScheduleScreenState extends State<EditScheduleScreen> {
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF1A237E)),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        filled: true,
+        fillColor: Colors.grey[50],
       ),
     );
   }
@@ -233,25 +262,25 @@ class _EditScheduleScreenState extends State<EditScheduleScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300),
           borderRadius: BorderRadius.circular(10),
+          color: Colors.grey[50],
         ),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFF1A237E)),
-            const SizedBox(width: 15),
+            Icon(icon, color: const Color(0xFF1A237E), size: 20),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  Text(subtitle, style: TextStyle(color: Colors.grey.shade600)),
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 ],
               ),
             ),
-            const Icon(Icons.edit, size: 18, color: Colors.grey),
           ],
         ),
       ),

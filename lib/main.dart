@@ -13,18 +13,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'package:uni_path/services/notification_service.dart';
 import 'package:uni_path/services/schedule_service.dart';
+import 'package:uni_path/services/sensor_service.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 
-// new line added by shouxian
-//xindongxi
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Load environment variables from the bundled .env asset
+  tz_data.initializeTimeZones();
   await dotenv.load(fileName: '.env');
 
-  // Initialize Supabase
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
@@ -32,24 +31,19 @@ Future<void> main() async {
 
   await EasyLocalization.ensureInitialized();
 
-  // --- MODULE 4 INITIALIZATION ---
-  // Initialize notifications (Timezones, Channels, and Permissions)
   final notificationService = NotificationService();
   await notificationService.init();
 
   runApp(
     EasyLocalization(
-      supportedLocales: const [
-        Locale('en'),
-        Locale('ms'),
-        Locale('zh'),
-        Locale('ja'),
-      ],
+      supportedLocales: const [Locale('en'), Locale('ms'), Locale('zh'), Locale('ja')],
       path: 'assets/translations',
       fallbackLocale: const Locale('en'),
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => UserProvider()),
+          // Changed to ChangeNotifierProvider to enable UI reactivity
+          ChangeNotifierProvider(create: (_) => SensorService()),
         ],
         child: const MainApp(),
       ),
@@ -67,35 +61,33 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
+  late SensorService _sensorService; // Store reference for disposal
 
   @override
   void initState() {
     super.initState();
     _initDeepLinks();
     _initializeSession();
+
+    // Initialize Study Mode (Hardware Listener)
+    _sensorService = Provider.of<SensorService>(context, listen: false);
+    _sensorService.initStudyMode();
   }
 
   Future<void> _initializeSession() async {
-    // Check local preferences to see if they specifically un-checked "Remember Me"
     final prefs = await SharedPreferences.getInstance();
-    final rememberMe = prefs.getBool('remember_me') ?? true; // default to true if never explicitly set
+    final rememberMe = prefs.getBool('remember_me') ?? true;
 
     if (!rememberMe) {
-      // They didn't want to be remembered across app boots. Wipe the cached Supabase token.
       await Supabase.instance.client.auth.signOut();
     } else {
-      // 1. Check for immediate session on boot
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         _loadUser(session.user.id);
-
-        // --- MODULE 4: BACKGROUND SYNC ---
-        // Sync local SQLite database with fresh data on app boot
         ScheduleService().getMySchedules();
       }
     }
 
-    // 2. Listen globally for token refreshes or logouts
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final session = data.session;
       if (session != null) {
@@ -118,37 +110,29 @@ class _MainAppState extends State<MainApp> {
 
   void _initDeepLinks() {
     _appLinks = AppLinks();
-
-    // Handle initial routing if app launched cold from a link
     _appLinks.getInitialLink().then((uri) {
       if (uri != null) _handleIncomingURI(uri);
     });
-
-    // Handle deep links when app is already in the background/foreground
     _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
       _handleIncomingURI(uri);
     });
   }
 
   Future<void> _handleIncomingURI(Uri uri) async {
-    // Expected link: https://unipath.com/event/<eventId>
     if (uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'event') {
       if (uri.pathSegments.length > 1) {
-        final eventIdStr = uri.pathSegments[1];
-        final eventId = int.tryParse(eventIdStr);
+        final eventId = int.tryParse(uri.pathSegments[1]);
         if (eventId != null) {
           try {
             final eventService = EventService();
             final matchedEvent = await eventService.getEventById(eventId);
             if (matchedEvent != null && globalNavigatorKey.currentState != null) {
               globalNavigatorKey.currentState!.push(
-                MaterialPageRoute(
-                  builder: (_) => EventDetailScreen(event: matchedEvent),
-                ),
+                MaterialPageRoute(builder: (_) => EventDetailScreen(event: matchedEvent)),
               );
             }
           } catch (e) {
-            debugPrint("Failed to route to event from deep link: $e");
+            debugPrint("Deep link error: $e");
           }
         }
       }
@@ -158,6 +142,7 @@ class _MainAppState extends State<MainApp> {
   @override
   void dispose() {
     _linkSubscription?.cancel();
+    _sensorService.dispose();
     super.dispose();
   }
 
@@ -173,7 +158,10 @@ class _MainAppState extends State<MainApp> {
       theme: ThemeData(
         useMaterial3: true,
         primarySwatch: Colors.purple,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6A1B9A), brightness: Brightness.light),
+        colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6A1B9A),
+            brightness: Brightness.light
+        ),
         scaffoldBackgroundColor: const Color(0xFFF5F7F9),
       ),
       home: const HomePage(),

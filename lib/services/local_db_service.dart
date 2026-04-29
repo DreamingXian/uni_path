@@ -14,24 +14,52 @@ class LocalDBService {
     String path = join(await getDatabasesPath(), 'unipath_offline.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Incremented version for new columns
       onCreate: (db, version) {
         return db.execute('''
           CREATE TABLE local_schedules(
             id TEXT PRIMARY KEY,
+            user_id TEXT,
             title TEXT,
+            description TEXT,
             location_name TEXT,
             start_time TEXT,
+            end_time TEXT,
+            label_name TEXT,
             is_homework INTEGER
           )
         ''');
       },
+      onUpgrade: (db, oldVersion, newVersion) {
+        if (oldVersion < 2) {
+          // Simplest upgrade: drop and recreate
+          db.execute("DROP TABLE IF EXISTS local_schedules");
+          db.execute('''
+            CREATE TABLE local_schedules(
+              id TEXT PRIMARY KEY,
+              user_id TEXT,
+              title TEXT,
+              description TEXT,
+              location_name TEXT,
+              start_time TEXT,
+              end_time TEXT,
+              label_name TEXT,
+              is_homework INTEGER
+            )
+          ''');
+        }
+      },
     );
   }
 
+  // FIXED: Added the missing saveLocally method for ScheduleService
   Future<void> saveLocally(Map<String, dynamic> data) async {
     final db = await database;
-    await db.insert('local_schedules', data, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+        'local_schedules',
+        data,
+        conflictAlgorithm: ConflictAlgorithm.replace
+    );
   }
 
   Future<void> cacheData(List<Map<String, dynamic>> schedules) async {
@@ -41,10 +69,14 @@ class LocalDBService {
     for (var s in schedules) {
       batch.insert('local_schedules', {
         'id': s['id'].toString(),
+        'user_id': s['user_id'],
         'title': s['title'],
+        'description': s['description'],
         'location_name': s['location_name'],
         'start_time': s['start_time'],
-        'is_homework': s['is_homework'] == true ? 1 : 0,
+        'end_time': s['end_time'],
+        'label_name': s['label_name'],
+        'is_homework': (s['is_homework'] == true || s['is_homework'] == 1) ? 1 : 0,
       });
     }
     await batch.commit();
