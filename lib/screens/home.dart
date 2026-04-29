@@ -3,13 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// Providers & Services
 import '../providers/user_provider.dart';
 import '../services/auth_service.dart';
 import '../services/payment_dashboard_service.dart';
 import '../services/sensor_service.dart';
 
-// Screens
 import 'Events/create_event.dart';
 import 'Events/payment_approval_dashboard.dart';
 import 'Events/my_tickets.dart';
@@ -19,7 +17,7 @@ import 'Events/events_screen.dart';
 import 'Events/scan_qr_nfc.dart';
 import 'Posts/community_screen.dart';
 import 'Schedules/schedule_screen.dart';
-import 'Schedules/create_schedule_screen.dart';
+import 'Schedules/create_schedule_screen.dart'; // [MEMBER 3 ADDITION]
 import 'Profiles/profile_screen.dart';
 import 'Profiles/saved_posts_screen.dart';
 import 'Posts/create_post_screen.dart';
@@ -32,7 +30,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _currentIndex = 0;
+  int _currentIndex = 0; // 0: Community, 1: Events, 2: Schedule, 3: Profile
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -60,19 +58,20 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  // navigator pages dynamically generated to pass states down
   void _updatePages() {
     _pages = [
-      const CommunityScreen(),
+      const CommunityScreen(), // Index 0
       EventsScreen(
         key: ValueKey('events_refresh_${_searchController.text}'),
         searchQuery: _searchController.text,
-      ),
+      ), // Index 1 receives live search
       ScheduleScreen(
         onDateChanged: (newDate) {
           _selectedScheduleDate = newDate;
         },
-      ),
-      const ProfileScreen(),
+      ), // Index 2
+      const ProfileScreen(),   // Index 3
     ];
   }
 
@@ -86,10 +85,56 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  // Function to scroll to top
   void _scrollToTop() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
     }
+  }
+
+  void _showLanguageDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('language'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildLanguageOption(context, 'English', 'en'),
+              _buildLanguageOption(context, 'Bahasa Melayu', 'ms'),
+              _buildLanguageOption(context, '简体中文', 'zh'),
+              _buildLanguageOption(context, '日本語', 'ja'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: Text('cancel'.tr()),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildLanguageOption(BuildContext context, String title, String locale) {
+    return RadioListTile<String>(
+      title: Text(title),
+      value: locale,
+      groupValue: context.locale.languageCode,
+      activeColor: const Color(0xFF6A1B9A),
+      onChanged: (String? value) {
+        if (value != null) {
+          context.setLocale(Locale(value));
+          Navigator.of(context).pop();
+        }
+      },
+    );
   }
 
   @override
@@ -104,25 +149,33 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       drawer: _buildDrawer(context, user),
+      // --- 1. TOP AREA (AppBar with Search Logic) ---
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: _isSearching ? null : Builder(
+        leading: _isSearching
+            ? null
+            : Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu, color: Color(0xFF1A237E)),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+            onPressed: () => Scaffold.of(context).openDrawer(), // open sidebar
           ),
         ),
         title: _isSearching
             ? TextField(
           controller: _searchController,
           autofocus: true,
-          decoration: InputDecoration(hintText: 'search_hint'.tr(), border: InputBorder.none),
+          decoration: InputDecoration(
+            hintText: 'search_hint'.tr(),
+            border: InputBorder.none,
+          ),
         )
             : GestureDetector(
           onTap: _scrollToTop,
-          child: Text('unipath_hub'.tr(),
-              style: const TextStyle(color: Color(0xFF1A237E), fontWeight: FontWeight.bold)),
+          child: Text(
+            'unipath_hub'.tr(),
+            style: const TextStyle(color: Color(0xFF1A237E), fontWeight: FontWeight.bold),
+          ),
         ),
         centerTitle: true,
         actions: [
@@ -152,13 +205,18 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
 
+      // --- 2. BODY  ---
       body: IndexedStack(index: _currentIndex, children: _pages),
 
+      // --- 3. CENTER ACTION BUTTON (FloatingActionButton) ---
+      // Shifted up to be half-crossed by the bar edge
       floatingActionButton: FloatingActionButton(
         onPressed: () => _handleFabAction(context, user),
         backgroundColor: const Color(0xFF6A1B9A),
         shape: const CircleBorder(),
+        // Inside floatingActionButton:
         child: Icon(
+          // Condition 1: If on Events tab AND user is a student, show Ticket icon
           _currentIndex == 1 && user?.role == 'student'
               ? Icons.confirmation_number
               : (_currentIndex == 0
@@ -173,8 +231,9 @@ class _HomePageState extends State<HomePage> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
+      // --- 4. BOTTOM NAVIGATION BAR ---
       bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
+        shape: const CircularNotchedRectangle(), // Creates the notch for the FAB
         notchMargin: 8.0,
         color: Colors.white,
         child: SizedBox(
@@ -182,11 +241,11 @@ class _HomePageState extends State<HomePage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildBottomIcon(Icons.forum, 0, user),
-              _buildBottomIcon(Icons.event, 1, user),
-              const SizedBox(width: 40),
-              _buildBottomIcon(Icons.calendar_month, 2, user),
-              _buildBottomIcon(Icons.person, 3, user),
+              _buildBottomIcon(context, Icons.forum, 0, user),      // Community
+              _buildBottomIcon(context, Icons.event, 1, user),      // Events
+              const SizedBox(width: 40),             // Gap for the center button
+              _buildBottomIcon(context, Icons.calendar_month, 2, user), // Schedule
+              _buildBottomIcon(context, Icons.person, 3, user),     // Profile
             ],
           ),
         ),
@@ -194,65 +253,109 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- HELPER METHODS PRESERVED ---
-  Widget _buildBottomIcon(IconData icon, int index, dynamic user) {
-    return IconButton(
-      icon: Icon(icon, color: _currentIndex == index ? const Color(0xFF6A1B9A) : Colors.grey),
-      onPressed: () {
-        if (index == 3 && user == null) {
-          _showLoginPrompt(context);
-        } else {
-          setState(() {
-            _currentIndex = index;
-            _isSearching = false;
-            _searchController.clear();
-            _updatePages();
-          });
-        }
-      },
-    );
-  }
-
+  /// Handles the action button based on the user's role and login status.
   void _handleFabAction(BuildContext context, dynamic user) {
+    // 1. Check if logged in first (Gatekeeper)
     if (user == null) {
       _showLoginPrompt(context);
       return;
     }
+
+    // 2. Handle actions based on which tab is active
     switch (_currentIndex) {
-      case 0:
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const CreatePostScreen()));
+      case 0: // Community Hub
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+        ).then((value) {
+          // We will add logic here later to refresh the feed if value == true
+        });
         break;
-      case 1:
+
+      case 1: // Events Module
         if (user.role == 'society') {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateEventScreen()));
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreateEventScreen()),
+          );
         } else {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTicketsScreen()));
+          // Students or anyone else viewing events
+          Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MyTicketsScreen())
+          );
         }
         break;
-      case 2:
-        Navigator.push(context, MaterialPageRoute(builder: (context) => CreateScheduleScreen(initialDate: _selectedScheduleDate)));
+
+      case 2: // [MEMBER 3 ADDITION: SCHEDULES & REMINDERS]
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => CreateScheduleScreen(initialDate: _selectedScheduleDate)),
+        );
         break;
-      case 3:
-        setState(() => _currentIndex = 0);
+
+      case 3: // Profile
+      // For example: Scroll to top or refresh profile data
+        setState(() => _currentIndex = 0); // Return to home/community
         break;
     }
   }
 
-  // --- DRAWER & DIALOGS PRESERVED ---
-  Widget _buildDrawer(BuildContext context, user) {
+  /// Shows a pop-up requiring the user to log in before proceeding.
+  void _showLoginPrompt(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Login Required"),
+        content: const Text("Please log in to proceed with this action."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6A1B9A),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx); // Close dialog
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
+              );
+            },
+            child: const Text("Login"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------
+  // DRAWER
+  // -------------------------------------------------------
+
+  Widget _buildDrawer(BuildContext context, dynamic user) {
     final bool isLoggedIn = user != null;
+
     return Drawer(
       child: Column(
         children: [
+          // --- Header ---
           Container(
             width: double.infinity,
             padding: const EdgeInsets.only(top: 60, left: 20, bottom: 20, right: 20),
-            decoration: const BoxDecoration(color: Color(0xFF6A1B9A)),
+            decoration: const BoxDecoration(
+              color: Color(0xFF6A1B9A), // Your Vibrant Purple
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 1. The Avatar
                 CircleAvatar(
-                  radius: 35,
+                  radius: 35, // Size control
                   backgroundColor: Colors.white,
                   backgroundImage: (isLoggedIn && user.avatarUrl != null)
                       ? NetworkImage(user.avatarUrl!)
@@ -261,24 +364,51 @@ class _HomePageState extends State<HomePage> {
                       ? null
                       : const Icon(Icons.person, color: Color(0xFF6A1B9A), size: 40),
                 ),
-                const SizedBox(height: 15),
+
+                const SizedBox(height: 15), // Precise spacing to prevent overlap
+
+                // 2. The Name
                 Text(
                   isLoggedIn ? user.fullName : 'guest_student'.tr(),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
                 ),
-                if (isLoggedIn) Text(user.email, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+
+                // 3. The Email/ID
+                if (isLoggedIn) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    user.email,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  if (user.studentId != null)
+                    Text(
+                      'ID: ${user.studentId}',
+                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                ] else ...[
+                  const Text(
+                    'Explore UniPath Features',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ],
               ],
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF6A1B9A)),
-            title: Text('scan_qr_nfc'.tr()),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanQRNFCScreen()));
-            },
-          ),
+
+          // --- Specific Module Links ---
           if (isLoggedIn) ...[
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF6A1B9A)),
+              title: Text('scan_qr_nfc'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanQRNFCScreen()));
+              },
+            ),
             ListTile(
               leading: Icon(user.role == 'society' ? Icons.event_note : Icons.local_activity, color: const Color(0xFF6A1B9A)),
               title: Text(user.role == 'society' ? 'manage_events'.tr() : 'manage_tickets'.tr()),
@@ -291,6 +421,7 @@ class _HomePageState extends State<HomePage> {
                 }
               },
             ),
+            // --- Payment Approval (society only) ---
             if (user.role == 'society')
               FutureBuilder<int>(
                 future: PaymentDashboardService().getPendingPaymentCount(),
@@ -303,12 +434,20 @@ class _HomePageState extends State<HomePage> {
                         const Icon(Icons.receipt_long_outlined, color: Color(0xFF6A1B9A)),
                         if (pendingCount > 0)
                           Positioned(
-                            top: -6, right: -8,
+                            top: -6,
+                            right: -8,
                             child: Container(
                               padding: const EdgeInsets.all(3),
                               constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                              child: Text('$pendingCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$pendingCount',
+                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                           ),
                       ],
@@ -329,8 +468,20 @@ class _HomePageState extends State<HomePage> {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedPostsScreen()));
               },
             ),
+          ] else ...[
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF6A1B9A)),
+              title: Text('scan_qr_nfc'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanQRNFCScreen()));
+              },
+            ),
           ],
+
           const Spacer(),
+
+          // --- Bottom General Links ---
           ListTile(
             leading: const Icon(Icons.language),
             title: Text('language'.tr()),
@@ -350,47 +501,36 @@ class _HomePageState extends State<HomePage> {
               }
             },
           ),
+
           const Divider(),
-          ListTile(
-            leading: Icon(isLoggedIn ? Icons.logout : Icons.login, color: isLoggedIn ? Colors.red : const Color(0xFF6A1B9A)),
-            title: Text(isLoggedIn ? 'logout'.tr() : 'login'.tr(),
-                style: TextStyle(color: isLoggedIn ? Colors.red : const Color(0xFF6A1B9A), fontWeight: FontWeight.bold)),
-            onTap: () {
-              Navigator.pop(context);
-              if (isLoggedIn) {
-                _handleLogout(context);
-              } else {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)));
-              }
-            },
-          ),
+
+          // --- Login / Logout button ---
+          if (isLoggedIn)
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: Text('logout'.tr(), style: const TextStyle(color: Colors.red)),
+              onTap: () => _handleLogout(context),
+            )
+          else
+            ListTile(
+              leading: const Icon(Icons.login, color: Color(0xFF6A1B9A)),
+              title: Text('login'.tr(), style: const TextStyle(color: Color(0xFF6A1B9A), fontWeight: FontWeight.bold)),
+              onTap: () {
+                Navigator.pop(context); // close drawer first
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
+                );
+              },
+            ),
+
+          const SizedBox(height: 8),
         ],
       ),
     );
   }
 
-  void _showLoginPrompt(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text("Login Required"),
-        content: const Text("Please log in to proceed with this action."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A1B9A), foregroundColor: Colors.white),
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)));
-            },
-            child: const Text("Login"),
-          ),
-        ],
-      ),
-    );
-  }
-
+  /// Shows a confirmation dialog and, if confirmed, signs the user out.
   Future<void> _handleLogout(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -399,9 +539,16 @@ class _HomePageState extends State<HomePage> {
         title: const Text('Log Out'),
         content: const Text('Are you sure you want to log out?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Log Out'),
           ),
@@ -410,8 +557,13 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (confirmed == true && context.mounted) {
+      // 1. Sign out from Supabase (clears server session)
       await AuthService().signOut();
+
+      // 2. Clear the user from global state
       Provider.of<UserProvider>(context, listen: false).logout();
+
+      // 3. Close the drawer and redirect to Login Page
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true)),
@@ -420,39 +572,24 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showLanguageDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('language'.tr()),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildLanguageOption(context, 'English', 'en'),
-              _buildLanguageOption(context, 'Bahasa Melayu', 'ms'),
-              _buildLanguageOption(context, '简体中文', 'zh'),
-              _buildLanguageOption(context, '日本語', 'ja'),
-            ],
-          ),
-          actions: [
-            TextButton(child: Text('cancel'.tr()), onPressed: () => Navigator.of(context).pop()),
-          ],
-        );
-      },
-    );
-  }
+  // -------------------------------------------------------
+  // BOTTOM NAV
+  // -------------------------------------------------------
 
-  Widget _buildLanguageOption(BuildContext context, String title, String locale) {
-    return RadioListTile<String>(
-      title: Text(title),
-      value: locale,
-      groupValue: context.locale.languageCode,
-      activeColor: const Color(0xFF6A1B9A),
-      onChanged: (String? value) {
-        if (value != null) {
-          context.setLocale(Locale(value));
-          Navigator.of(context).pop();
+  // Helper for Bottom Nav Icons
+  Widget _buildBottomIcon(BuildContext context, IconData icon, int index, dynamic user) {
+    return IconButton(
+      icon: Icon(icon, color: _currentIndex == index ? const Color(0xFF6A1B9A) : Colors.grey),
+      onPressed: () {
+        if (index == 3 && user == null) {
+          _showLoginPrompt(context);
+        } else {
+          setState(() {
+            _currentIndex = index;
+            _isSearching = false;
+            _searchController.clear();
+            _updatePages();
+          });
         }
       },
     );

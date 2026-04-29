@@ -19,8 +19,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 
-// new line added by shouxian
-//xindongxi
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
