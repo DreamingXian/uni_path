@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../../providers/user_provider.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+import '../../services/schedule_service.dart';
 import '../auth_screen.dart';
+import 'edit_schedule_screen.dart';
+import '../../models/schedule_model.dart';
 
 class ScheduleScreen extends StatefulWidget {
-  const ScheduleScreen({super.key});
+  final Function(DateTime)? onDateChanged;
+
+  const ScheduleScreen({super.key, this.onDateChanged});
 
   @override
   State<ScheduleScreen> createState() => _ScheduleScreenState();
@@ -16,112 +19,127 @@ class ScheduleScreen extends StatefulWidget {
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
   bool _isStudyModeActive = false;
-  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
-
-  // Calendar State
+  StreamSubscription<AccelerometerEvent>? _accelSub;
   DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
+  DateTime? _selectedDay = DateTime.now();
+  final _scheduleService = ScheduleService();
+
+  // Using int as the key for deleting status
+  final Set<int> _deletingIds = {};
 
   @override
   void initState() {
     super.initState();
-    _selectedDay = _focusedDay;
-    _initAccelerometer();
-  }
-
-  @override
-  void dispose() {
-    _accelerometerSubscription?.cancel();
-    super.dispose();
-  }
-
-  void _initAccelerometer() {
-    _accelerometerSubscription = accelerometerEventStream().listen((AccelerometerEvent event) {
-      // Study Mode logic: Flip phone face down
+    _accelSub = accelerometerEventStream().listen((event) {
       bool faceDown = event.z < -9.0;
       if (faceDown != _isStudyModeActive) {
-        setState(() => _isStudyModeActive = faceDown);
+        if (mounted) setState(() => _isStudyModeActive = faceDown);
       }
     });
   }
 
   @override
+  void dispose() {
+    _accelSub?.cancel();
+    super.dispose();
+  }
+
+  void _refresh() => setState(() {});
+
+  @override
   Widget build(BuildContext context) {
-    final user = Provider.of<UserProvider>(context).currentUser;
-    if (user == null) return _buildLoginRequiredView(context);
+    final userId = Supabase.instance.client.auth.currentUser?.id;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Weekly Timetable", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Weekly Timetable"),
         backgroundColor: const Color(0xFF1A237E),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.sync),
+            onPressed: _refresh,
+          )
+        ],
       ),
       body: Column(
         children: [
-          // 1. ONE-WEEK CALENDAR VIEW
-          Container(
-            color: Colors.white,
-            child: TableCalendar(
-              firstDay: DateTime.utc(2024, 1, 1),
-              lastDay: DateTime.utc(2030, 12, 31),
-              focusedDay: _focusedDay,
-              calendarFormat: CalendarFormat.week, // Lock to one week
-              availableCalendarFormats: const {CalendarFormat.week: 'Week'},
-              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-              onDaySelected: (selectedDay, focusedDay) {
-                setState(() {
-                  _selectedDay = selectedDay;
-                  _focusedDay = focusedDay;
-                });
-              },
-              calendarStyle: const CalendarStyle(
-                selectedDecoration: BoxDecoration(color: Color(0xFF6A1B9A), shape: BoxShape.circle),
-                todayDecoration: BoxDecoration(color: Color(0xFF1A237E), shape: BoxShape.circle),
-              ),
-              headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
-            ),
+          TableCalendar(
+            firstDay: DateTime.utc(2024, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: _focusedDay,
+            calendarFormat: CalendarFormat.week,
+            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+            onDaySelected: (sel, foc) {
+              setState(() {
+                _selectedDay = sel;
+                _focusedDay = foc;
+              });
+              if (widget.onDateChanged != null) {
+                widget.onDateChanged!(sel);
+              }
+            },
           ),
-
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: _buildStudyModeStatus(),
-          ),
-
-          // 2. SEPARATED LIST (CLASSES VS HOMEWORK)
+          _buildStudyModeBanner(),
           Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: Supabase.instance.client
-                  .from('schedules')
-                  .stream(primaryKey: ['id'])
-                  .eq('user_id', user.id)
-                  .order('start_time'),
+            child: userId == null
+                ? _buildGuestPlaceholder()
+                : FutureBuilder<List<ScheduleModel>>(
+              future: _scheduleService.getMySchedules(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                final dayRecords = snapshot.data!.where((item) {
-                  final date = DateTime.parse(item['start_time']).toLocal();
-                  return isSameDay(date, _selectedDay);
+                // Catch potential formatting errors in the model mapping
+                if (snapshot.hasError) {
+                  return Center(child: Text("Data Error: ${snapshot.error}"));
+                }
+
+                final allSchedules = snapshot.data ?? [];
+
+                // --- FILTERING LOGIC ---
+                final dayRecords = allSchedules.where((item) {
+                  if (item.id == null) return false;
+                  final isNotDeleted = !_deletingIds.contains(item.id);
+
+                  // 1. Check for one-time date match
+                  bool matchesDate = isSameDay(item.startTime, _selectedDay);
+
+                  // 2. Check for repeating weekday match
+                  bool matchesRepeating = false;
+                  if (item.isRepeating && (item.repeatDays as List).map((e) => int.parse(e.toString())).toList().contains(_selectedDay!.weekday)) {
+                    matchesRepeating = true;
+                  }
+
+                  return (matchesDate || matchesRepeating) && isNotDeleted;
                 }).toList();
 
-                // Categorizing records
-                final classes = dayRecords.where((item) => item['is_homework'] == false).toList();
-                final homework = dayRecords.where((item) => item['is_homework'] == true).toList();
+                // Sort by time
+                dayRecords.sort((a, b) => a.startTime.compareTo(b.startTime));
 
-                if (dayRecords.isEmpty) return _buildEmptyState();
+                if (dayRecords.isEmpty) {
+                  return const Center(child: Text("No activities scheduled for today."));
+                }
 
-                return ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    if (classes.isNotEmpty) ...[
-                      _buildSectionHeader("Academic Classes", Icons.school),
-                      ...classes.map((item) => _buildScheduleCard(context, item)),
-                      const SizedBox(height: 10),
+                final classes = dayRecords.where((i) => !i.isHomework).toList();
+                final homework = dayRecords.where((i) => i.isHomework).toList();
+
+                return RefreshIndicator(
+                  onRefresh: () async => _refresh(),
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      if (classes.isNotEmpty) ...[
+                        _buildHeader("Academic Classes", Icons.school),
+                        ...classes.map((i) => _buildScheduleCard(context, i))
+                      ],
+                      if (homework.isNotEmpty) ...[
+                        _buildHeader("Homework & Tasks", Icons.assignment),
+                        ...homework.map((i) => _buildScheduleCard(context, i))
+                      ],
                     ],
-                    if (homework.isNotEmpty) ...[
-                      _buildSectionHeader("Homework & Tasks", Icons.assignment_turned_in),
-                      ...homework.map((item) => _buildScheduleCard(context, item)),
-                    ],
-                  ],
+                  ),
                 );
               },
             ),
@@ -131,72 +149,128 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: const Color(0xFF1A237E)),
-          const SizedBox(width: 8),
-          Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
-        ],
-      ),
-    );
-  }
+  // --- UI COMPONENTS ---
 
-  Widget _buildScheduleCard(BuildContext context, Map<String, dynamic> item) {
-    final startTime = DateTime.parse(item['start_time']).toLocal();
-    final bool isHomework = item['is_homework'] == true;
+  Widget _buildHeader(String title, IconData icon) => Padding(
+    padding: const EdgeInsets.only(top: 20, bottom: 8),
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: const Color(0xFF1A237E)),
+        const SizedBox(width: 8),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
+      ],
+    ),
+  );
 
+  Widget _buildScheduleCard(BuildContext context, ScheduleModel item) {
     return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        title: Text(item['title'] ?? "Untitled", style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(isHomework ? "Due Today" : item['location_name'] ?? "No Venue"),
-        trailing: Text(
-          "${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}",
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+        title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              ScheduleService.formatTimeRange(item.startTime, item.endTime),
+              style: const TextStyle(color: Color(0xFF6A1B9A), fontWeight: FontWeight.w600),
+            ),
+            if (item.description != null && item.description!.isNotEmpty)
+              Text(
+                item.description!,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+          ],
         ),
-        onLongPress: () => _showDeleteDialog(context, item['id']),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey, size: 20),
+              onPressed: () async {
+                // Converting back to JSON for the Edit screen's requirement
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => EditScheduleScreen(item: item.toMap()))
+                );
+                _refresh();
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+              onPressed: () => _confirmDelete(context, item),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStudyModeStatus() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _isStudyModeActive ? Colors.green.withOpacity(0.1) : const Color(0xFFF3E5F5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _isStudyModeActive ? Colors.green : const Color(0xFF6A1B9A)),
-      ),
-      child: Row(
-        children: [
-          Icon(_isStudyModeActive ? Icons.auto_awesome : Icons.info_outline, color: _isStudyModeActive ? Colors.green : const Color(0xFF6A1B9A)),
-          const SizedBox(width: 10),
-          Expanded(child: Text(_isStudyModeActive ? "Study Mode: Notifications Silenced" : "Place phone face-down to focus", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+  void _confirmDelete(BuildContext context, ScheduleModel item) {
+    if (item.id == null) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Confirm Delete"),
+        content: Text("Delete '${item.title}'?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              setState(() => _deletingIds.add(item.id!));
+              try {
+                await _scheduleService.deleteSchedule(item.id!);
+                _refresh();
+              } catch (e) {
+                if (mounted) {
+                  setState(() => _deletingIds.remove(item.id!));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Delete failed: $e"))
+                  );
+                }
+              }
+            },
+            child: const Text("Delete"),
+          ),
         ],
       ),
     );
   }
 
-  void _showDeleteDialog(BuildContext context, dynamic id) {
-    showDialog(context: context, builder: (context) => AlertDialog(
-      title: const Text("Delete Record?"),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-        TextButton(onPressed: () async {
-          await Supabase.instance.client.from('schedules').delete().eq('id', id);
-          if (mounted) Navigator.pop(context);
-        }, child: const Text("Delete", style: TextStyle(color: Colors.red))),
+  Widget _buildStudyModeBanner() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    color: _isStudyModeActive ? Colors.green.withOpacity(0.1) : Colors.transparent,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(_isStudyModeActive ? Icons.auto_awesome : Icons.phone_android, size: 16, color: _isStudyModeActive ? Colors.green : Colors.grey),
+        const SizedBox(width: 8),
+        Text(
+          _isStudyModeActive ? "Study Mode Active" : "Place phone face-down to focus",
+          style: TextStyle(fontSize: 12, color: _isStudyModeActive ? Colors.green : Colors.grey),
+        ),
       ],
-    ));
-  }
+    ),
+  );
 
-  Widget _buildEmptyState() => const Center(child: Padding(padding: EdgeInsets.only(top: 50), child: Text("No records for this day.", style: TextStyle(color: Colors.grey))));
-
-  Widget _buildLoginRequiredView(BuildContext context) => const Center(child: Text("Please Log In"));
+  Widget _buildGuestPlaceholder() => Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.lock_outline, size: 64, color: Colors.grey[400]),
+        const SizedBox(height: 16),
+        const Text("Viewing as Guest", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const SizedBox(height: 20),
+        ElevatedButton(
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen(showLogin: true))),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A1B9A)),
+          child: const Text("Login", style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
 }

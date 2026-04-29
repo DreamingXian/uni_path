@@ -10,6 +10,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'home.dart';
 
+
 class AuthScreen extends StatefulWidget {
   final bool showLogin;
   const AuthScreen({super.key, this.showLogin = true});
