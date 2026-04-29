@@ -13,6 +13,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'package:uni_path/services/notification_service.dart';
 import 'package:uni_path/services/schedule_service.dart';
+import 'package:uni_path/services/sensor_service.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -22,6 +25,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Load environment variables from the bundled .env asset
+  tz_data.initializeTimeZones();
   await dotenv.load(fileName: '.env');
 
   // Initialize Supabase
@@ -32,8 +36,6 @@ Future<void> main() async {
 
   await EasyLocalization.ensureInitialized();
 
-  // --- MODULE 4 INITIALIZATION ---
-  // Initialize notifications (Timezones, Channels, and Permissions)
   final notificationService = NotificationService();
   await notificationService.init();
 
@@ -50,6 +52,8 @@ Future<void> main() async {
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => UserProvider()),
+          // Changed to ChangeNotifierProvider to enable UI reactivity
+          ChangeNotifierProvider(create: (_) => SensorService()),
         ],
         child: const MainApp(),
       ),
@@ -67,12 +71,17 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
+  late SensorService _sensorService; // Store reference for disposal
 
   @override
   void initState() {
     super.initState();
     _initDeepLinks();
     _initializeSession();
+
+    // Initialize Study Mode (Hardware Listener)
+    _sensorService = Provider.of<SensorService>(context, listen: false);
+    _sensorService.initStudyMode();
   }
 
   Future<void> _initializeSession() async {
@@ -88,9 +97,6 @@ class _MainAppState extends State<MainApp> {
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         _loadUser(session.user.id);
-
-        // --- MODULE 4: BACKGROUND SYNC ---
-        // Sync local SQLite database with fresh data on app boot
         ScheduleService().getMySchedules();
       }
     }
@@ -158,6 +164,7 @@ class _MainAppState extends State<MainApp> {
   @override
   void dispose() {
     _linkSubscription?.cancel();
+    _sensorService.dispose();
     super.dispose();
   }
 
