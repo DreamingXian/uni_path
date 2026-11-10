@@ -1,5 +1,4 @@
 # UniPath: Your Campus Companion
-# Duedate: 19/04/2026, Week 12 Sunday (not exactly this time but try to done all by this)
 
 **UniPath** is a comprehensive mobile application designed specifically for the **TARUMT** student community. It integrates campus navigation, event management, social interaction, and personal academic organization into a single, seamless platform.
 
